@@ -1,7 +1,5 @@
 """
-adv_config.py
-
-Generates a template config file for use with AutoDock Vina/Vina-Carb 
+Generates a template config file for use with AutoDock Vina/Vina-Carb
 using a grid dimensions file generated with AutoDockTools.
 
 Args:
@@ -16,10 +14,11 @@ import pathlib
 
 def script_args():
     """
-    script_args()
+    Parse command-line arguments and return a Namespace object containing
+    pathlib.Path paths to each user-defined input file.
 
     Returns:
-        Namespace object containing pathlib.Path paths to each user-defined input file.
+        argparse.Namespace: A Namespace object containing input file paths.
     """
     parser = ArgumentParser()
     parser.add_argument("-i", "--input", type=pathlib.Path, required=True, nargs="+",
@@ -28,15 +27,13 @@ def script_args():
 
 def parse_gridbox(gridbox_file):
     """
-    parse_gridbox()
-
-    Converts each user-defined input file into a template AutoDock Vina config file
+    Converts each user-defined input file into a template AutoDock Vina config file.
 
     Args:
-        gridbox_file:   pathlib.Path path to one of the input files
-    
+        gridbox_file:   pathlib.Path path to one of the input files.
+
     Returns:
-        config.txt file in the same directory as the input file
+        None
     """
 
     gridbox_contents = []
@@ -77,8 +74,6 @@ def parse_gridbox(gridbox_file):
 
 def main():
     """
-    main()
-
     Primary execution point of the script.
 
     Usage:
