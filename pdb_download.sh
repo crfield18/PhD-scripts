@@ -1,1 +1,0 @@
-/Users/user/Library/CloudStorage/OneDrive-TheUniversityofManchester/Documents/CSF/AutoDock/231011-CBMcarb-pdb-dataset/pdb_download.sh
