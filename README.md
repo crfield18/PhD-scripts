@@ -2,6 +2,8 @@
 
 A collection of scripts written for use with different computational biology/chemistry packages throughout my PhD.
 
+---
+
 ## General
 
 ### [pdb_download.sh](pdb_download.sh) (2023/10/11)
@@ -12,6 +14,8 @@ code on each line.
 #### To-Do
 
 - [ ] Parallel downloads
+
+---
 
 ## AMBER
 
