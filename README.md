@@ -34,3 +34,13 @@ Designed for use with LEaP (AmberTools).
 Generates a template config file for use with AutoDock Vina/Vina-Carb using the grid dimensions from an grid AutoDockTools grid dimensions file.
 
 ---
+
+## Flow Chemistry
+
+### [read_pressure.py](read_pressure) (2023/12/15)
+
+Measure and record the pressure within the current Manchester [Future BRH](https://futurebrh.com) flow chemistry setup using _Fluigent_ Microfluidic In-Line Pressure Sensor (IPS). More information about the IPS can be found here: <https://www.fluigent.com/research/instruments/sensors/pressure-unit/>
+
+Require the Fluigent SDK: <https://github.com/Fluigent/fgt-SDK>
+
+---
