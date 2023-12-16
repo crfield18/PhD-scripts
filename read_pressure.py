@@ -19,7 +19,7 @@ def update_plot(frame, data_time, data_pressure, line, ax, csv):
     data_time.append(current_time)
     data_pressure.append(measurement)
 
-    csv.writelines(f'{current_time-data_time[0]:.4f},{measurement:.4f}\n')
+    csv.writelines(f'{current_time:.4f},{measurement:.4f}\n')
 
     # Ignore the first value in the data (raw time.perf_counter() output. i.e. =/= 0)
     line.set_data(data_time[1:], data_pressure[1:])
@@ -63,7 +63,7 @@ def main():
         # Other solvents possible. See fgt_SENSOR_CALIBRATION in 'Fluigent SDK.pdf' Chapter 5
         fluigent.fgt_set_sensorCalibration(i, 1)
 
-        title_string = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+        title_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         with open(f'{title_string}.csv', 'w') as output_csv:
             current_time = time.perf_counter()
