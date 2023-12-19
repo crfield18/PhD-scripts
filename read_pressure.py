@@ -68,7 +68,7 @@ def main():
 
             fig, ax = plt.subplots()
             line, = ax.plot([], [], label='Pressure')
-            ax.set_ylim(-10, 1030)
+            ax.set_ylim(-10, 2232.0811)
 
             plt.title(title_string.replace('_', ' '))
             plt.xlabel('Time (s)')
