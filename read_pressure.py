@@ -6,15 +6,10 @@ from matplotlib.animation import FuncAnimation
 
 # Update the graph with new data as it is collected
 def update_plot(frame, data_time, data_pressure, line, ax, csv):
-
     # data_time[0] is the actual start value. The first data added to the csv is data_time[1]
     current_time = time.perf_counter() - data_time[0]
     measurement = fluigent.fgt_get_sensorValue(0)
-
-    # try:
-    #     data_time.append(current_time-data_time[0])
-    # except IndexError:
-    #     data_time.append(current_time)
+    print(f'{measurement:.4f}')
 
     data_time.append(current_time)
     data_pressure.append(measurement)
@@ -28,14 +23,15 @@ def update_plot(frame, data_time, data_pressure, line, ax, csv):
     ax.relim()
     ax.autoscale_view()
 
-    # # Scroll graph showing 100 data at once
-    # if len(data_time) < 100:
-    #     ax.set_xlim(0, data_time[-1])
-    # else:
-    #     ax.set_xlim(data_time[-100], data_time[-1])
+    # Scroll graph showing 600 data at once
+    max_data = 600
+    if len(data_time) < max_data:
+        ax.set_xlim(0, data_time[-1])
+    else:
+        ax.set_xlim(data_time[- max_data], data_time[-1])
 
-    # Show all data
-    ax.set_xlim(0, data_time[-1])
+    # # Show all data
+    # ax.set_xlim(0, data_time[-1])
 
 def main():
     data_time, data_pressure = [], []
@@ -49,7 +45,6 @@ def main():
 
     for i, serial_num in enumerate(serial_numbers):
         print(f'Detected instrument at index: {i}, ControllerSN: {serial_num}, type: {str(types[i])}')
-        print(fluigent.fgt_get_sensorValue(i))
 
     # Initialise the devices in serial_numbers
     fluigent.fgt_init(serial_numbers)
@@ -73,7 +68,7 @@ def main():
 
             fig, ax = plt.subplots()
             line, = ax.plot([], [], label='Pressure')
-            ax.set_ylim(-10, 1030) # Setting automatically probably works now
+            ax.set_ylim(-10, 1030)
 
             plt.title(title_string.replace('_', ' '))
             plt.xlabel('Time (s)')
