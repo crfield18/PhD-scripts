@@ -60,7 +60,7 @@ def main():
 
         title_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-        with open(f'{title_string}.csv', 'w') as output_csv:
+        with open(f'results/{title_string}.csv', 'w') as output_csv:
             current_time = time.perf_counter()
             measurement = fluigent.fgt_get_sensorValue(i)
             unit = fluigent.fgt_get_sensorUnit(i)
@@ -83,7 +83,7 @@ def main():
             data_time.append(0)
             data_pressure.append(0)
 
-            # Update the data and graph every 500 ms 
+            # Update the data and graph every 500 ms
             animation = FuncAnimation(fig,
                                       update_plot,
                                       fargs=(data_time,
