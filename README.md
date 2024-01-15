@@ -27,6 +27,12 @@ Designed for use with LEaP (AmberTools).
 
 ---
 
+### [amber2csm.py](amber2csm) (2024/01/15)
+
+Re-format pdb files from MD simulations using AMBER and GLYCAM force fields via cpptraj (AmberTools). 3-letter sugar residue codes are renamed to match those found on the [Protein Data Bank](https://www.rcsb.org) (PDB) for compatibility with [CSM-carbohydrate](https://biosig.lab.uq.edu.au/csm_carbohydrate/), a webserver predicting protein-carbohydrate binding affinity (Nguyen et al. 2022).
+
+---
+
 ## AutoDock Vina/Vina-Carb
 
 ### [adv_config.py](adv_config.py) (2023/09/29)
