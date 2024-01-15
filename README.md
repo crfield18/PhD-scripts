@@ -41,6 +41,6 @@ Generates a template config file for use with AutoDock Vina/Vina-Carb using the 
 
 Measure and record the pressure within the current Manchester [Future BRH](https://futurebrh.com) flow chemistry setup using _Fluigent_ Microfluidic In-Line Pressure Sensor (IPS). More information about the IPS can be found here: <https://www.fluigent.com/research/instruments/sensors/pressure-unit/>
 
-Require the Fluigent SDK: <https://github.com/Fluigent/fgt-SDK>
+Requires the Fluigent SDK: <https://github.com/Fluigent/fgt-SDK>
 
 ---
