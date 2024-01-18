@@ -8,7 +8,8 @@ Args:
     --input/-i: Path to one or more pdb files
 
 Returns:
-    "config.txt" in the input file's directory
+  Formatted PDB file(s) are stored in a new or existing subdirectory named "amber2csm_output"
+  located at the same path as the input PDB file.
 '''
 
 import os
@@ -23,9 +24,37 @@ def script_args():
     Returns:
         argparse.Namespace: A Namespace object containing input file paths.
     '''
-    parser = ArgumentParser()
-    parser.add_argument('-i', '--input', type=Path, required=True, nargs='+', help='')
+
+    parser = ArgumentParser(description='Reformat pdb files for CSM-carbohydrate compatibility.')
+    parser.add_argument('-i', '--input', type=Path, required=True, nargs='+',
+                        help='Path to one or more pdb files')
     return parser.parse_args()
+
+def line_filter(line:str):
+    '''
+    Format a line from a PDB file to be compatible with CSM-carbohydrate.
+    beta-Glucose residues are given the residue code BGC and are moved to chain B.
+    Protein residues are moved to chain A.
+
+    Args:
+        line:   String containing 1 line of an open PDB file.
+
+    Returns:
+        Formatted line string.
+    '''
+
+    amber_glc_codes = ['ROH', '4GA', '0GB']
+    if line.startswith('ATOM'):
+        if line[17:20] not in amber_glc_codes and line[21] == ' ':
+            # Add Chain ID A to all non-glucose residues
+            return f'{line[0:21]}A {line[23:-1]}\n'
+        if line[17:20] in amber_glc_codes:
+            # Replace GLYCAM glucose 3 letter codes with BGC and move to chain B
+            return f'{line[0:17]}BGC B {line[23:-1]}\n'
+        return line
+    if line.startswith('TER'):
+        return 'TER\n'
+    return line
 
 def convert_to_csm(pdb_file):
     '''
@@ -45,20 +74,12 @@ def convert_to_csm(pdb_file):
     # Make an output directory inside the pdb file directory
     results_dir = pdb_parent_dir / f'{os.path.basename(__file__).split(".")[0]}_output'
     results_dir.mkdir(parents=True, exist_ok=True)
-
     output_file_path = results_dir / f'{pdb_file.stem}_output.pdb'
+
     with open(pdb_file, 'r', encoding='utf-8') as input_file, \
          open(output_file_path, 'w', encoding='utf-8') as output_file:
         for line in input_file:
-            amber_glc_codes = ['ROH', '4GA', '0GB']
-            if line[0:3] == 'TER':
-                output_file.writelines('TER\n')
-            elif line[0:4] != 'ATOM' or line[17:20] not in amber_glc_codes:
-                output_file.writelines(line)
-            else:
-                newline = f'{line[0:17]}BGC B {line[23:-1]}\n'
-                # print(newline)
-                output_file.writelines(newline)
+            output_file.writelines(line_filter(line))
 
 def main():
     '''
