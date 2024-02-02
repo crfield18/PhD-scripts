@@ -11,11 +11,9 @@ A collection of scripts written for use with different computational biology/che
 Download a list of PDB files using a text file containing one 4-character PDB
 code on each line.
 
-#### To-Do
+### [align_pdb.py](align_pdb.py) (2024/02/02)
 
-- [ ] Parallel downloads
-
----
+Align a list of PDB files to a reference structure using [PyMOL](https://pymol.org/2/) (Schrödinger, Inc.).
 
 ## Molecular Dynamics (AMBER)
 
@@ -25,13 +23,9 @@ Determine the number of monovalent salt ions are required for an explicit solven
 
 Designed for use with LEaP ([AmberTools](https://ambermd.org/tutorials/basic/tutorial9/index.php)).
 
----
-
 ### [amber2csm.py](amber2csm.py) (2024/01/15)
 
 Re-format pdb files from MD simulations using AMBER and GLYCAM force fields via cpptraj (AmberTools). 3-letter sugar residue codes are renamed to match those found on the [Protein Data Bank](https://www.rcsb.org) (PDB) for compatibility with [CSM-carbohydrate](https://biosig.lab.uq.edu.au/csm_carbohydrate/), a webserver predicting protein-carbohydrate binding affinity ([Nguyen _et al._ 2022](https://doi.org/10.1093/bib/bbab512)).
-
----
 
 ### [fixatomnum.py](fixatomnum.py) (2024/01/19)
 
