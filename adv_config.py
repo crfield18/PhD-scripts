@@ -3,7 +3,7 @@ Generates a template config file for use with AutoDock Vina/Vina-Carb
 using a grid dimensions file generated with AutoDockTools.
 
 Args:
-    --input/-i: Path to one or more grid dimensions files
+    -i, --input:    Input grid dimensions file.
 
 Returns:
     File named "config.txt" in the same directory as the input file

@@ -5,7 +5,7 @@ a webserver predicting protein-carbohydrate binding affinity.
 (Nguyen et al. 2022; https://biosig.lab.uq.edu.au/csm_carbohydrate/)
 
 Args:
-    --input/-i: Path to one or more pdb files
+    -i, --input:    Input PDB files to align.
 
 Returns:
   Formatted PDB file(s) are stored in a new or existing subdirectory named "amber2csm_output"

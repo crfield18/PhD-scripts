@@ -4,7 +4,7 @@ pdb4amber (AmberTools) https://ambermd.org/tutorials/basic/tutorial9/index.php, 
 MolProbity http://molprobity.biochem.duke.edu.
 
 Args:
-    --input/-i: Path to one or more pdb files
+    -i, --input:    Input PDB files to align.
 
 Returns:
     Re-formatted PDB file following the naming convention "inputfilename"_output.pdb,
