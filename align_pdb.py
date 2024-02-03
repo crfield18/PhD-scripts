@@ -8,9 +8,9 @@ Usage:
     python align_pdb.py -i input1.pdb input2.pdb -r reference.pdb
 
 Args:
-    -i, --input:    Input PDB files to align.
+    -i, --input:    Input PDB files to align (≥2).
     -g, --gui:      Run PyMOL instances with the GUI.
-    -r, --ref:      Reference PDB file to align to.
+    -r, --ref:      Reference PDB file to align to (1).
 '''
 
 from pathlib import Path
@@ -53,17 +53,12 @@ def align_structure():
     pdb_files = user_args.input
 
     # Run the PyMOL instance with or without the GUI
-    if user_args.gui:
-        pymol_session = pymol.pymolPy3() # Run instance with GUI
-    else:
-        pymol_session = pymol.pymolPy3(0) # Run instance without GUI
+    pymol_session = pymol.pymolPy3() if user_args.gui else pymol.pymolPy3(0)
 
     # Define the reference structure for alignment.
     # Defaults to the first pdb file from the inputs list
-    if user_args.ref:
-        ref_pdb = user_args.ref.stem.replace(" ", "_")
-    else:
-        ref_pdb = pdb_files[0].stem.replace(" ", "_")
+    ref_pdb_path = user_args.ref if user_args.ref else pdb_files[0]
+    ref_pdb = ref_pdb_path.stem.replace(" ", "_")
 
     # Add reference structure to list of pdb files if it's not already
     if user_args.ref and user_args.ref not in pdb_files:
@@ -89,7 +84,9 @@ def align_structure():
             pass
 
     # Save current PyMOL session as a .pse file
-    pymol_session(f'save {ref_pdb}_aligned.pse')
+    output_file = ref_pdb_path.parent / f'{ref_pdb}_aligned.pse'
+    pymol_session(f'save {output_file}')
+    print(f'Output file: {output_file}')
 
 if __name__ == '__main__':
     align_structure()
