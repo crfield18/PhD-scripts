@@ -1,10 +1,16 @@
 from pathlib import Path
 import re
 from argparse import ArgumentParser
+import warnings
+
+from Bio.PDB.MMCIFParser import MMCIFParser
+from Bio.PDB.mmcifio import MMCIFIO
+from Bio import BiopythonWarning
 
 import wget
 import pymolPy3 as pymol
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 def script_args():
     parser = ArgumentParser()
@@ -33,7 +39,7 @@ def html_to_pdb(pdb_file):
         file.truncate()
 
 def pymol_view(pdb_dir:Path, ref_pdb:Path, align_pdbs:bool):
-    pymol_session = pymol.pymolPy3(0)
+    pymol_session = pymol.pymolPy3()
 
     loaded_pdbs = []
 
@@ -113,7 +119,7 @@ class DaliResults:
                     pass
                 else:
                     # Extract the PDB code + chain and the URL to the aligned pdb file from results html
-                    pdbid_with_chain = regex_finder(r'cd2=([a-zA-Z0-9]{5})', line)
+                    pdbid_with_chain = regex_finder(r'cd2=([0-9][a-zA-Z0-9]{4})', line)
                     pdb_url = regex_finder(r'http://[^"]+', line)
 
                     if pdbid_with_chain and pdb_url:
@@ -123,8 +129,8 @@ class DaliResults:
 
         return self.dali_pdbs
 
-    def pdb_download(self):
-        for code, download_url in self.dali_pdbs.items():
+    def aligned_pdb_download(self):
+        for code, download_url in tqdm(self.dali_pdbs.items(), desc='Downloading DALI aligned PDBs', unit=' PDBs'):
             output_pdb = self.dir_pdb_aligned / f'{code}.pdb'
             if not output_pdb.exists():
                 print(f'\rDownloading:\t{code}.pdb', end='', flush=True)
@@ -134,22 +140,94 @@ class DaliResults:
             else:
                 print(f'{code}.pdb found. Skipping...')
 
+    def cif_download(self):
+        unique_pdbs = {}
+
+        for file_path in self.pdb_dali_aligned.iterdir():
+            if file_path.is_file():
+                pdb_code = str(file_path.stem[0:4])
+                chain_id = file_path.stem[4]
+
+                if pdb_code not in unique_pdbs:
+                    unique_pdbs[pdb_code] = list(chain_id)
+                else:
+                    unique_pdbs[pdb_code].append(chain_id)
+
+            # print(unique_pdbs)
+
+            PDB_DL_URL_BASE = 'https://files.rcsb.org/download'
+
+            warnings.filterwarnings('ignore', category=BiopythonWarning) # suppress PDBConstructionWarning
+            parser = MMCIFParser()
+
+            for cif, chain_list in tqdm(unique_pdbs.items(),
+                                        desc='Downloading and Processing',
+                                        unit=' mmCIF files'):
+                cif_file_path = self.pdb_unaligned / f'{cif}.cif'
+                if not cif_file_path.exists():
+                    try:
+                        # Download the PDB file
+                        wget.download(url=f'{PDB_DL_URL_BASE}/{cif}.cif', out=cif_file_path, bar=None)
+                    except Exception as e:
+                        # print(f'\nError downloading {cif}: {e}.\n')
+                        # change this print to some kind of logging thing??
+                        continue
+
+                structure = parser.get_structure(structure_id=cif, filename=cif_file_path)
+
+                for chain in tqdm(chain_list,
+                                desc=f'Processing Chains for {cif}',
+                                unit=' chains',
+                                leave=False):
+                    try:
+                        chain_structure = structure[0][chain]
+
+                        # # Cut HETATM entries
+                        # chain_structure = chain_structure.copy()
+                        # heteroatoms = [residue for residue in chain_structure.get_residues() if residue.id[0] != " "]
+                        # for heteroatom in heteroatoms:
+                        #     chain_structure.detach_child(heteroatom.id)
+
+                        # # Skip chain if all HETATM
+                        # if not chain_structure.child_list:
+                        #     continue
+
+                        io = MMCIFIO()
+                        io.set_structure(chain_structure)
+                        single_chain_cif_path = self.pdb_unaligned / f'{cif}-{chain}.cif'
+                        io.save(str(single_chain_cif_path))
+                    except KeyError:
+                        # change to logging
+                        # print(f'Chain {chain} not found in {cif}.cif. Skipping...')
+                        continue
+
 def main():
-    testrun = DaliResults()
+    dali_job = DaliResults()
     # Download all the DALI results pages
-    testrun.download()
+    dali_job.download()
     # Extract all of the DALI-aligned PDB file download links
-    testrun.pdb_links()
+    dali_job.pdb_links()
     # Download all the DALI-aligned PDB files
     # Maybe set an RMSD limit so you're not downloading ~5000 pdb files (e.g. 2.5 Å ?)
     # This should also limit memory usage form loading in pdb files to pymol
-    testrun.pdb_download()
+    dali_job.aligned_pdb_download()
 
+    # # Load all DALI-aligned PDB files into a Pymol session
     # pymol_view(
-    #     pdb_dir=testrun.dir_pdb_aligned,
+    #     pdb_dir=dali_job.dir_pdb_aligned,
     #     ref_pdb=Path('/Users/user/Library/CloudStorage/OneDrive-TheUniversityofManchester/Documents/GitHub/PhD-scripts/DALI/results/1i8uA/pdb_dali_aligned/1i8uA.pdb'),
     #     align_pdbs=False
     #     )
+
+    dali_job.cif_download()
+
+    # # Load all clean PDB files (.mmcif format to deal with large models) into a new Pymol session and align
+    # # Need to add method for capturing RMSD values from pymol to construct a df with DALI and pymol RMSD values
+    # pymol_view(
+    # pdb_dir=Path('/Users/user/Library/CloudStorage/OneDrive-TheUniversityofManchester/Documents/GitHub/PhD-scripts/DALI-results-parser/results/1i8uA/pdb_unaligned/chains'),
+    # ref_pdb=Path('/Users/user/Library/CloudStorage/OneDrive-TheUniversityofManchester/Documents/GitHub/PhD-scripts/DALI-results-parser/results/1i8uA/pdb_unaligned/chains/1i8u-A.cif'),
+    # align_pdbs=True
+    # )
 
 if __name__ == '__main__':
     main()
