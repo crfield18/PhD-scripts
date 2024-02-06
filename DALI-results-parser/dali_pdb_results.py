@@ -49,21 +49,27 @@ def pymol_view(pdb_dir:Path, ref_pdb:Path, align_pdbs:bool):
             pymol_session(f'load {file_path}')
             loaded_pdbs.append(file_path.stem)
 
+    if ref_pdb.stem not in loaded_pdbs:
+        if ref_pdb.is_file():
+            pymol_session(f'load {ref_pdb}')
+            loaded_pdbs.append(ref_pdb.stem)
+
     # Show all structures using cartoon representation
     pymol_session('hide all')
     pymol_session('show cartoon,all')
-
-    # Centre view on the reference structure
-    pymol_session(f'center {ref_pdb}')
     pymol_session('zoom all')
 
     # Align PDBs to reference
     if align_pdbs:
-        output_file = f'{ref_pdb}_aligned-pymol.pse'
+        output_file = f'{ref_pdb.stem}_aligned-pymol.pse'
         for pdb in loaded_pdbs:
-            pymol_session(f'align {pdb}, {ref_pdb}')
+            pymol_session(f'align {pdb}, {ref_pdb.stem}')
+            pymol_session('zoom all')
     else:
-        output_file = f'{ref_pdb}_aligned-dali.pse'
+        output_file = f'{ref_pdb.stem}_aligned-dali.pse'
+
+    pymol_session(f'center {ref_pdb.stem}')
+    pymol_session('zoom all')
 
     # Save Pymol session
     pymol_session(f'save {output_file}')
@@ -91,7 +97,7 @@ class DaliResults:
     def download(self):
         results_index = self.dir_dali / f'{self.job_id}_index.html'
         if not results_index.exists():
-            wget.download(url=self.results_url, out=str(results_index))
+            wget.download(url=self.results_url, out=str(results_index), bar=None)
 
         with open(results_index, 'r', encoding='UTF8') as file:
             soup = BeautifulSoup(file, 'html.parser')
@@ -102,10 +108,10 @@ class DaliResults:
                 page_url = f'{self.results_url}{page}'
                 output_file = self.dir_dali / page
                 if not output_file.exists():
-                    print(f'Downloading {output_file}')
+
                     wget.download(url=page_url, out=str(output_file))
                 else:
-                    print(f'{output_file.name} found.\tSkipping...')
+                    print(f'\r{output_file.name} found.\tSkipping...', end='', flush=True)
             except Exception as e:
                 print(f'\nError downloading {output_file.name}: {e}.')
 
@@ -138,12 +144,18 @@ class DaliResults:
                 print(f'\rCleaning:\t{code}.pdb', end='', flush=True)
                 html_to_pdb(output_pdb)
             else:
-                print(f'{code}.pdb found. Skipping...')
+                print(f'\r{code}.pdb found. Skipping...', end='', flush=True)
 
     def cif_download(self):
         unique_pdbs = {}
 
-        for file_path in self.pdb_dali_aligned.iterdir():
+        cif_originals_path = self.dir_pdb_clean / 'originals'
+        cif_chains_path = self.dir_pdb_clean / 'chains'
+
+        cif_originals_path.mkdir(parents=True, exist_ok=True)
+        cif_chains_path.mkdir(parents=True, exist_ok=True)
+
+        for file_path in self.dir_pdb_aligned.iterdir():
             if file_path.is_file():
                 pdb_code = str(file_path.stem[0:4])
                 chain_id = file_path.stem[4]
@@ -153,53 +165,53 @@ class DaliResults:
                 else:
                     unique_pdbs[pdb_code].append(chain_id)
 
-            # print(unique_pdbs)
+        print(unique_pdbs)
 
-            PDB_DL_URL_BASE = 'https://files.rcsb.org/download'
+        PDB_DL_URL_BASE = 'https://files.rcsb.org/download'
 
-            warnings.filterwarnings('ignore', category=BiopythonWarning) # suppress PDBConstructionWarning
-            parser = MMCIFParser()
+        warnings.filterwarnings('ignore', category=BiopythonWarning) # suppress PDBConstructionWarning
+        parser = MMCIFParser()
 
-            for cif, chain_list in tqdm(unique_pdbs.items(),
-                                        desc='Downloading and Processing',
-                                        unit=' mmCIF files'):
-                cif_file_path = self.pdb_unaligned / f'{cif}.cif'
-                if not cif_file_path.exists():
-                    try:
-                        # Download the PDB file
-                        wget.download(url=f'{PDB_DL_URL_BASE}/{cif}.cif', out=cif_file_path, bar=None)
-                    except Exception as e:
-                        # print(f'\nError downloading {cif}: {e}.\n')
-                        # change this print to some kind of logging thing??
-                        continue
+        for cif, chain_list in tqdm(unique_pdbs.items(),
+                                    desc='Downloading and Processing',
+                                    unit=' mmCIF files'):
+            cif_file_path = self.dir_pdb_clean / 'originals' / f'{cif}.cif'
+            if not cif_file_path.exists():
+                try:
+                    # Download the PDB file
+                    wget.download(url=f'{PDB_DL_URL_BASE}/{cif}.cif', out=cif_file_path, bar=None)
+                except Exception as e:
+                    # print(f'\nError downloading {cif}: {e}.\n')
+                    # change this print to some kind of logging thing??
+                    continue
 
-                structure = parser.get_structure(structure_id=cif, filename=cif_file_path)
+            structure = parser.get_structure(structure_id=cif, filename=cif_file_path)
 
-                for chain in tqdm(chain_list,
-                                desc=f'Processing Chains for {cif}',
-                                unit=' chains',
-                                leave=False):
-                    try:
-                        chain_structure = structure[0][chain]
+            for chain in tqdm(chain_list,
+                            desc=f'Processing Chains for {cif}',
+                            unit=' chains',
+                            leave=False):
+                try:
+                    chain_structure = structure[0][chain]
 
-                        # # Cut HETATM entries
-                        # chain_structure = chain_structure.copy()
-                        # heteroatoms = [residue for residue in chain_structure.get_residues() if residue.id[0] != " "]
-                        # for heteroatom in heteroatoms:
-                        #     chain_structure.detach_child(heteroatom.id)
+                    # # Cut HETATM entries
+                    # chain_structure = chain_structure.copy()
+                    # heteroatoms = [residue for residue in chain_structure.get_residues() if residue.id[0] != " "]
+                    # for heteroatom in heteroatoms:
+                    #     chain_structure.detach_child(heteroatom.id)
 
-                        # # Skip chain if all HETATM
-                        # if not chain_structure.child_list:
-                        #     continue
+                    # # Skip chain if all HETATM
+                    # if not chain_structure.child_list:
+                    #     continue
 
-                        io = MMCIFIO()
-                        io.set_structure(chain_structure)
-                        single_chain_cif_path = self.pdb_unaligned / f'{cif}-{chain}.cif'
-                        io.save(str(single_chain_cif_path))
-                    except KeyError:
-                        # change to logging
-                        # print(f'Chain {chain} not found in {cif}.cif. Skipping...')
-                        continue
+                    io = MMCIFIO()
+                    io.set_structure(chain_structure)
+                    single_chain_cif_path = cif_chains_path / f'{cif}-{chain}.cif'
+                    io.save(str(single_chain_cif_path))
+                except KeyError:
+                    # change to logging
+                    # print(f'Chain {chain} not found in {cif}.cif. Skipping...')
+                    continue
 
 def main():
     dali_job = DaliResults()
@@ -219,15 +231,15 @@ def main():
     #     align_pdbs=False
     #     )
 
-    dali_job.cif_download()
+    # dali_job.cif_download()
 
-    # # Load all clean PDB files (.mmcif format to deal with large models) into a new Pymol session and align
-    # # Need to add method for capturing RMSD values from pymol to construct a df with DALI and pymol RMSD values
-    # pymol_view(
-    # pdb_dir=Path('/Users/user/Library/CloudStorage/OneDrive-TheUniversityofManchester/Documents/GitHub/PhD-scripts/DALI-results-parser/results/1i8uA/pdb_unaligned/chains'),
-    # ref_pdb=Path('/Users/user/Library/CloudStorage/OneDrive-TheUniversityofManchester/Documents/GitHub/PhD-scripts/DALI-results-parser/results/1i8uA/pdb_unaligned/chains/1i8u-A.cif'),
-    # align_pdbs=True
-    # )
+    # Load all clean PDB files (.mmcif format to deal with large models) into a new Pymol session and align
+    # Need to add method for capturing RMSD values from pymol to construct a df with DALI and pymol RMSD values
+    pymol_view(
+    pdb_dir=Path('/home/bs18cf/Documents/GitHub/PhD-scripts/DALI-results-parser/results/1i8uA/pdb_unaligned/test'),
+    ref_pdb=Path('/home/bs18cf/Documents/GitHub/PhD-scripts/DALI-results-parser/results/1i8uA/pdb_unaligned/chains/1i8u-A.cif'),
+    align_pdbs=True
+    )
 
 if __name__ == '__main__':
     main()
