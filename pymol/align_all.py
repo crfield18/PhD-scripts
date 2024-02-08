@@ -32,6 +32,7 @@ def align_to_ref(reference_object:str, method:str):
 def define_alignment_method(method_str):
     def align_all(reference_object):
         align_to_ref(reference_object, method=method_str)
+        print(f'{method_str}_all complete!')
     # function accepts 1 object to be used as the reference
     cmd.extend(f'{method_str}_all', align_all)
     cmd.auto_arg[0][f'{method_str}_all'] = [cmd.object_sc, 'object', '']
