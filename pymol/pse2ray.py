@@ -15,9 +15,12 @@ def main():
     pymol_session = pymol.pymolPy3(0)
     image_files = []
     input_pse = script_args().input
+
+    pymol_session('viewport 3000, 2000')
     for pse in input_pse:
         pymol_session('reinitialize')
         pymol_session(f'load {pse}')
+        pymol_session('zoom visible')
         raw_figure = pse.with_suffix(".png")
         pymol_session(f'png {raw_figure}, width=3000, height=2000, dpi=300, ray=1')
         image_files.append(raw_figure)
