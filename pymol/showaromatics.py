@@ -11,4 +11,5 @@ def showaromatics(selection='all'):
     cmd.set('cartoon_smooth_loops', 0)
 
 cmd.extend('showaromatics', showaromatics)
-cmd.auto_arg[0]['showaromatics'] = [cmd.selection_sc, 'selection', '']
+# cmd.auto_arg[0]['showaromatics'] = [cmd.selection_sc, 'selection', '']
+cmd.auto_arg[0]['showaromatics'] = [cmd.object_sc, 'object', '']
