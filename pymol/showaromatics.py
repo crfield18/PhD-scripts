@@ -5,14 +5,11 @@ def showaromatics(selection='all'):
     cmd.show('cartoon', selection)
     cmd.color('gray', selection)
     cmd.select('aromatics', f'(resn tyr+trp+his) and {selection}')
-    cmd.show('sticks', f'(aromatics and !(name c+n+o))')
+    cmd.show('sticks', '(aromatics and !(name c+n+o))')
     cmd.color('magenta', 'aromatics')
     cmd.disable('aromatics')
     cmd.set('cartoon_smooth_loops', 0)
 
-def main():
-    cmd.extend('showaromatics', showaromatics)
-    cmd.auto_arg[0]['showaromatics'] = [cmd.selection_sc, 'selection', '']
+cmd.extend('showaromatics', showaromatics)
+cmd.auto_arg[0]['showaromatics'] = [cmd.selection_sc, 'selection', '']
 
-if __name__ == '__main__':
-    main()
