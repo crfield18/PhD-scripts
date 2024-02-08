@@ -22,9 +22,17 @@ def align_to_ref(reference_object:str, method:str):
     # Run command for each object (excluding 'sele' and the chosen reference object)
     method_function = alignment_functions.get(method)
     if method_function:
+        print(f'Reference object:\t{reference_object}')
         for obj in non_sele_objs():
             if obj != reference_object:
-                method_function(obj, reference_object)
+                results = method_function(obj, reference_object)
+                # super and align
+                if type(results) == tuple:
+                    rmsd = results[0]
+                # cealign
+                elif type(results) == dict:
+                    rmsd = results["RMSD"]
+                print(f'{obj}:\t{rmsd} Å')
     else:
         pass
 
