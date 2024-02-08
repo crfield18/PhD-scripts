@@ -8,7 +8,6 @@ from Bio.PDB.mmcifio import MMCIFIO
 from Bio import BiopythonWarning
 
 import wget
-import pymolPy3 as pymol
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
@@ -38,43 +37,6 @@ def html_to_pdb(pdb_file):
         file.writelines(filtered_lines)
         file.truncate()
 
-def pymol_view(pdb_dir:Path, ref_pdb:Path, align_pdbs:bool):
-    pymol_session = pymol.pymolPy3()
-
-    loaded_pdbs = []
-
-    for file_path in pdb_dir.iterdir():
-        if file_path.is_file():
-            # Perform operations with the file here
-            pymol_session(f'load {file_path}')
-            loaded_pdbs.append(file_path.stem)
-
-    if ref_pdb.stem not in loaded_pdbs:
-        if ref_pdb.is_file():
-            pymol_session(f'load {ref_pdb}')
-            loaded_pdbs.append(ref_pdb.stem)
-
-    # Show all structures using cartoon representation
-    pymol_session('hide all')
-    pymol_session('show cartoon,all')
-    pymol_session('zoom all')
-
-    # Align PDBs to reference
-    if align_pdbs:
-        output_file = f'{ref_pdb.stem}_aligned-pymol.pse'
-        for pdb in loaded_pdbs:
-            pymol_session(f'align {pdb}, {ref_pdb.stem}')
-            pymol_session('zoom all')
-    else:
-        output_file = f'{ref_pdb.stem}_aligned-dali.pse'
-
-    pymol_session(f'center {ref_pdb.stem}')
-    pymol_session('zoom all')
-
-    # Save Pymol session
-    pymol_session(f'save {output_file}')
-    print(f'Output file: {output_file}')
-
 class DaliResults:
     def __init__(self) -> None:
         self.results_url = script_args().input
@@ -95,7 +57,7 @@ class DaliResults:
             getattr(self, name).mkdir(parents=True, exist_ok=True)
 
     def download(self):
-        results_index = self.dir_dali / f'{self.job_id}_index.html'
+        results_index = self.dir_dali / 's001A_index.html'
         if not results_index.exists():
             wget.download(url=self.results_url, out=str(results_index), bar=None)
 
@@ -119,7 +81,7 @@ class DaliResults:
 
     def pdb_links(self):
         dali_pdbs = {}
-        with open(self.dir_dali / f'{self.job_id}.html', 'r', encoding='UTF8') as results_html:
+        with open(self.dir_dali / 's001A.html', 'r', encoding='UTF8') as results_html:
             for line in results_html:
                 if 'VALUE="cd2=' not in line:
                     pass
@@ -136,7 +98,9 @@ class DaliResults:
         return self.dali_pdbs
 
     def aligned_pdb_download(self):
-        for code, download_url in tqdm(self.dali_pdbs.items(), desc='Downloading DALI aligned PDBs', unit=' PDBs'):
+        for code, download_url in tqdm(self.dali_pdbs.items(),
+                                       desc='',
+                                       unit=' PDBs'):
             output_pdb = self.dir_pdb_aligned / f'{code}.pdb'
             if not output_pdb.exists():
                 print(f'\rDownloading:\t{code}.pdb', end='', flush=True)
@@ -191,27 +155,20 @@ class DaliResults:
                             desc=f'Processing Chains for {cif}',
                             unit=' chains',
                             leave=False):
-                try:
-                    chain_structure = structure[0][chain]
+                
+                cif_chains_file_path = self.dir_pdb_clean / 'chains' / f'{cif}-chain.cif'
+                if not cif_chains_file_path.exists():
+                    try:
+                        chain_structure = structure[0][chain]
 
-                    # # Cut HETATM entries
-                    # chain_structure = chain_structure.copy()
-                    # heteroatoms = [residue for residue in chain_structure.get_residues() if residue.id[0] != " "]
-                    # for heteroatom in heteroatoms:
-                    #     chain_structure.detach_child(heteroatom.id)
-
-                    # # Skip chain if all HETATM
-                    # if not chain_structure.child_list:
-                    #     continue
-
-                    io = MMCIFIO()
-                    io.set_structure(chain_structure)
-                    single_chain_cif_path = cif_chains_path / f'{cif}-{chain}.cif'
-                    io.save(str(single_chain_cif_path))
-                except KeyError:
-                    # change to logging
-                    # print(f'Chain {chain} not found in {cif}.cif. Skipping...')
-                    continue
+                        io = MMCIFIO()
+                        io.set_structure(chain_structure)
+                        single_chain_cif_path = cif_chains_path / f'{cif}-{chain}.cif'
+                        io.save(str(single_chain_cif_path))
+                    except KeyError:
+                        # change to logging
+                        # print(f'Chain {chain} not found in {cif}.cif. Skipping...')
+                        continue
 
 def main():
     dali_job = DaliResults()
@@ -221,25 +178,9 @@ def main():
     dali_job.pdb_links()
     # Download all the DALI-aligned PDB files
     # Maybe set an RMSD limit so you're not downloading ~5000 pdb files (e.g. 2.5 Å ?)
-    # This should also limit memory usage form loading in pdb files to pymol
     dali_job.aligned_pdb_download()
 
-    # # Load all DALI-aligned PDB files into a Pymol session
-    # pymol_view(
-    #     pdb_dir=dali_job.dir_pdb_aligned,
-    #     ref_pdb=Path('/Users/user/Library/CloudStorage/OneDrive-TheUniversityofManchester/Documents/GitHub/PhD-scripts/DALI/results/1i8uA/pdb_dali_aligned/1i8uA.pdb'),
-    #     align_pdbs=False
-    #     )
-
-    # dali_job.cif_download()
-
-    # Load all clean PDB files (.mmcif format to deal with large models) into a new Pymol session and align
-    # Need to add method for capturing RMSD values from pymol to construct a df with DALI and pymol RMSD values
-    pymol_view(
-    pdb_dir=Path('/home/bs18cf/Documents/GitHub/PhD-scripts/DALI-results-parser/results/1i8uA/pdb_unaligned/test'),
-    ref_pdb=Path('/home/bs18cf/Documents/GitHub/PhD-scripts/DALI-results-parser/results/1i8uA/pdb_unaligned/chains/1i8u-A.cif'),
-    align_pdbs=True
-    )
+    dali_job.cif_download()
 
 if __name__ == '__main__':
     main()
