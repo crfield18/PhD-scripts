@@ -10,9 +10,5 @@ def showaromatics(selection='all'):
     cmd.disable('aromatics')
     cmd.set('cartoon_smooth_loops', 0)
 
-def main():
-    cmd.extend('showaromatics', showaromatics)
-    cmd.auto_arg[0]['showaromatics'] = [cmd.selection_sc, 'selection', '']
-
-if __name__ == "__main__":
-    main()
+cmd.extend('showaromatics', showaromatics)
+cmd.auto_arg[0]['showaromatics'] = [cmd.selection_sc, 'selection', '']
