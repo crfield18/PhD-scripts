@@ -35,9 +35,9 @@ def align_to_ref(reference_object:str, method:str):
             if obj != reference_object:
                 if method_function == cmd.do:
                     method_function(f'tmalign {obj}, {reference_object}')
-                elif method_function in ('cealign'):
+                elif method_function == cmd.cealign):
                     method_function(reference_object, obj)
-                elif method_function in ('align, super'):
+                elif method_function in (cmd.align, cmd.super'):
                     method_function(obj, reference_object)
                 else:
                     pass
