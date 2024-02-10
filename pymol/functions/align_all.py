@@ -35,9 +35,9 @@ def align_to_ref(reference_object:str, method:str):
             if obj != reference_object:
                 if method_function == cmd.do:
                     method_function(f'tmalign {obj}, {reference_object}')
-                elif method_function == cmd.cealign):
+                elif method_function == cmd.cealign:
                     method_function(reference_object, obj)
-                elif method_function in (cmd.align, cmd.super'):
+                elif method_function in (cmd.align, cmd.super):
                     method_function(obj, reference_object)
                 else:
                     pass
@@ -51,17 +51,17 @@ def align_to_ref(reference_object:str, method:str):
                     results_dict[obj] = {}
                 results_dict[obj]['RMSD'] = rmsd
                 results_dict[obj]['TM'] = tm
-                
-            print(results_dict)
+    print(f'tm results type: {type(tm)}')
+    print(results_dict)
 
-    # Write the alignment results of a csv file in the current working directory
-    with open(cwd / f'{reference_object}-{method}.csv', 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['target', f'{method}_rmsd'])
-        for key, value in results_dict.items():
-            writer.writerow([key, value])
+    # # Write the alignment results of a csv file in the current working directory
+    # with open(cwd / f'{reference_object}-{method}.csv', 'w', newline='') as csvfile:
+    #     writer = csv.writer(csvfile)
+    #     writer.writerow(['target', f'{method}_rmsd'])
+    #     for key, value in results_dict.items():
+    #         writer.writerow([key, value])
 
-    print(f'\nResults written to:\t{reference_object}-{method}.csv\n')
+    # print(f'\nResults written to:\t{reference_object}-{method}.csv\n')
 
 # Create callable function inside pymol called method_all for each alignment algorithm
 def define_alignment_method(method_str):
