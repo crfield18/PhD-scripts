@@ -19,7 +19,7 @@ def align_to_ref(reference_object:str, method:str):
     alignment_functions = {
         'align': cmd.align,
         'cealign': cmd.cealign,
-        'super': cmd.super
+        'super': cmd.super,
         # Requires TMalign executable. See: https://pymolwiki.org/index.php/TMalign
         'tmalign': cmd.tmalign
     }
