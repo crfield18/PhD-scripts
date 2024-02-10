@@ -44,7 +44,8 @@ def align_to_ref(reference_object:str, method:str):
 
                 # Calculate and store RMSD and TM scores for the alignment
                 rmsd = cmd.rms_cur(obj, reference_object)
-                tm = cmd.do(f'tmscore {obj}, {reference_object}')
+                # tm = cmd.do(f'tmscore {obj}, {reference_object}')
+                tm = cmd.tmscore(obj, reference_object)
                 # print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å\tTM:{tm}    ', end='', flush=True)
                 # print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å    ', end='', flush=True)
                 if obj not in results_dict:
