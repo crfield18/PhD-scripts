@@ -20,8 +20,8 @@ def align_to_ref(reference_object:str, method:str):
         'align': cmd.align,
         'cealign': cmd.cealign,
         'super': cmd.super
-        # # Requires TMalign executable. See: https://pymolwiki.org/index.php/TMalign
-        # 'tmalign': cmd.tmalign
+        # Requires TMalign executable. See: https://pymolwiki.org/index.php/TMalign
+        'tmalign': cmd.tmalign
     }
 
     results_dict = {}
