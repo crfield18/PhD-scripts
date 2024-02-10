@@ -35,15 +35,23 @@ def align_to_ref(reference_object:str, method:str):
             if obj != reference_object:
                 if method_function == cmd.do:
                     method_function(f'tmalign {obj}, {reference_object}')
-                else:
+                elif method_function in ('cealign'):
+                    method_function(reference_object, obj)
+                elif method_function in ('align, super'):
                     method_function(obj, reference_object)
+                else:
+                    pass
 
+                # Calculate and store RMSD and TM scores for the alignment
                 rmsd = cmd.rms_cur(obj, reference_object)
                 tm = cmd.do(f'tmscore {obj}, {reference_object}')
                 # print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å\tTM:{tm}    ', end='', flush=True)
-                print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å    ', end='', flush=True)
+                # print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å    ', end='', flush=True)
+                if obj not in results_dict:
+                    results_dict[obj] = {}
                 results_dict[obj]['RMSD'] = rmsd
                 results_dict[obj]['TM'] = tm
+                
             print(results_dict)
 
     # Write the alignment results of a csv file in the current working directory
