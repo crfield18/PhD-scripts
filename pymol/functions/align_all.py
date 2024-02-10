@@ -40,9 +40,11 @@ def align_to_ref(reference_object:str, method:str):
 
                 rmsd = cmd.rms_cur(obj, reference_object)
                 tm = cmd.do(f'tmscore {obj}, {reference_object}')
-                print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å\tTM:{tm}    ', end='', flush=True)
+                # print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å\tTM:{tm}    ', end='', flush=True)
+                print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å    ', end='', flush=True)
                 results_dict[obj]['RMSD'] = rmsd
                 results_dict[obj]['TM'] = tm
+            print(results_dict)
 
     # Write the alignment results of a csv file in the current working directory
     with open(cwd / f'{reference_object}-{method}.csv', 'w', newline='') as csvfile:
