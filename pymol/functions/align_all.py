@@ -21,28 +21,28 @@ def align_to_ref(reference_object:str, method:str):
         'cealign': cmd.cealign,
         'super': cmd.super,
         # Requires TMalign executable. See: https://pymolwiki.org/index.php/TMalign
-        'tmalign': cmd.tmalign
+        # 240210: cmd.tmalign causing segmentation fault. Switching to cmd.do for now
+        'tmalign': cmd.do
     }
 
     results_dict = {}
 
     # Run command for each object (excluding 'sele' and the chosen reference object)
     method_function = alignment_functions.get(method)
-
     if method_function:
         print(f'\nReference object:\t{reference_object}\n')
         for obj in non_sele_objs():
             if obj != reference_object:
-                # Extract the RMSD value from the different result types
-                results = method_function(obj, reference_object)
-                print(type(results))
-                print(results)
-                if method in ('super', 'align'):
-                    rmsd = results[0]
-                elif method == 'cealign':
-                    rmsd = results["RMSD"]
-                print(f'\r{obj}:\t{rmsd:.5f} Å    ', end='', flush=True)
-                results_dict[obj] = rmsd
+                if method_function == cmd.do:
+                    method_function(f'tmalign {obj}, {reference_object}')
+                else:
+                    method_function(obj, reference_object)
+
+                rmsd = cmd.rms_cur(obj, reference_object)
+                tm = cmd.do(f'tmscore {obj}, {reference_object}')
+                print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å\tTM:{tm}    ', end='', flush=True)
+                results_dict[obj]['RMSD'] = rmsd
+                results_dict[obj]['TM'] = tm
 
     # Write the alignment results of a csv file in the current working directory
     with open(cwd / f'{reference_object}-{method}.csv', 'w', newline='') as csvfile:
