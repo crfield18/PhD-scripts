@@ -35,12 +35,12 @@ def align_to_ref(reference_object:str, method:str):
             if obj != reference_object:
                 # Extract the RMSD value from the different result types
                 results = method_function(obj, reference_object)
+                print(type(results))
+                print(results)
                 if method in ('super', 'align'):
                     rmsd = results[0]
                 elif method == 'cealign':
                     rmsd = results["RMSD"]
-                else:
-                    print(rmsd)
                 print(f'\r{obj}:\t{rmsd:.5f} Å    ', end='', flush=True)
                 results_dict[obj] = rmsd
 
