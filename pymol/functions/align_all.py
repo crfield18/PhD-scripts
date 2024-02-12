@@ -1,6 +1,7 @@
 from pathlib import Path
 import csv
 from pymol import cmd
+import psico.fullinit
 
 cwd = Path.cwd()
 
@@ -21,8 +22,7 @@ def align_to_ref(reference_object:str, method:str):
         'cealign': cmd.cealign,
         'super': cmd.super,
         # Requires TMalign executable. See: https://pymolwiki.org/index.php/TMalign
-        # 240210: cmd.tmalign causing segmentation fault. Switching to cmd.do for now
-        'tmalign': cmd.do
+        'tmalign': cmd.tmalign
     }
 
     results_dict = {}
@@ -33,11 +33,9 @@ def align_to_ref(reference_object:str, method:str):
         print(f'\nReference object:\t{reference_object}\n')
         for obj in non_sele_objs():
             if obj != reference_object:
-                if method_function == cmd.do:
-                    method_function(f'tmalign {obj}, {reference_object}')
-                elif method_function == cmd.cealign:
+                if method_function == cmd.cealign:
                     method_function(reference_object, obj)
-                elif method_function in (cmd.align, cmd.super):
+                elif method_function in (cmd.align, cmd.super, cmd.tmalign):
                     method_function(obj, reference_object)
                 else:
                     pass
@@ -45,14 +43,14 @@ def align_to_ref(reference_object:str, method:str):
                 # Calculate and store RMSD and TM scores for the alignment
                 rmsd = cmd.rms_cur(obj, reference_object)
                 # tm = cmd.do(f'tmscore {obj}, {reference_object}')
-                tm = cmd.tmscore(obj, reference_object)
+                # tm = cmd.tmscore(obj, reference_object)
                 # print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å\tTM:{tm}    ', end='', flush=True)
                 # print(f'\r{obj}:\tRMSD:\t{rmsd:.5f} Å    ', end='', flush=True)
                 if obj not in results_dict:
                     results_dict[obj] = {}
                 results_dict[obj]['RMSD'] = rmsd
-                results_dict[obj]['TM'] = tm
-    print(f'tm results type: {type(tm)}')
+                # results_dict[obj]['TM'] = tm
+    # print(f'tm results type: {type(tm)}')
     print(results_dict)
 
     # # Write the alignment results of a csv file in the current working directory
@@ -75,3 +73,20 @@ def define_alignment_method(method_str):
 
 for algorithm in ['tmalign', 'align', 'cealign', 'super']:
     define_alignment_method(algorithm)
+
+
+# Align using tmalign method
+def tmalign_all(reference_object:str):
+    align_to_ref(reference_object, method='tmalign')
+
+# Align using align method
+def align_all(reference_object:str):
+    align_to_ref(reference_object, method='align')
+
+# Align using cealign method
+def cealign_all(reference_object:str):
+    align_to_ref(reference_object, method='cealign')
+
+# Align using super method
+def super_all(reference_object:str):
+    align_to_ref(reference_object, method='super')
