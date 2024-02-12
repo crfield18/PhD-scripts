@@ -1,0 +1,32 @@
+name: tmalign
+channels:
+  - conda-forge
+dependencies:
+  - apbs
+  - speleo3::aggrescan3d
+  - biopython
+  - speleo3::csb
+  - coverage
+  - sbl::dssp
+  - mdtraj
+  - matplotlib
+  - msms
+  - mypy
+  - openbabel
+  - pip
+  - schrodinger::pymol >=2.5.6
+  - schrodinger::vtk-m 1.5.*
+  - python <3.12  # https://github.com/schrodinger/pymol-open-source/issues/320
+  - pytest
+  - qhull
+  - rdkit
+  - ruff
+  - scipy
+  - kimlab::stride
+  - theseus
+  - speleo3::tmalign
+  - bioconda::tmalign
+  - schrodinger::pymol-psico
+
+  - pip:
+    - epam.indigo
