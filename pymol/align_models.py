@@ -8,6 +8,10 @@ import numpy as np
 import pandas as pd
 from pymol import cmd
 import psico.fullinit
+from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.spatial.distance import squareform
+import matplotlib.pyplot as plt
+
 
 class PyMOLRMS():
     def __init__(self, rms_results) -> None:
@@ -137,12 +141,16 @@ class PyMOLAlign():
             if tm > self.tmmatrix.loc[pair[0], pair[1]] or isnan(self.tmmatrix.loc[pair[0], pair[1]]):
                 self.tmmatrix.loc[pair[0], pair[1]] = tm
                 self.tmmatrix.loc[pair[1], pair[0]] = tm
+            
+            print(self.tmmatrix)
 
         # Fill the diagonal with TMscores of 1
             # Identical proteins give a TMscore of 1
             # ∴ We do not need to run any calculations
         for obj in unique_model_list:
             self.tmmatrix.loc[obj,obj] = 1.0
+        
+        print(self.tmmatrix)
 
         return self.tmmatrix
     
@@ -240,7 +248,7 @@ def align():
 
     # Write results to a JSON file (mainly for testing)
     with open('results.json', 'w', encoding='UTF8') as json_file:
-        json.dump(pymol_instance.results_dicz, json_file, indent=4)
+        json.dump(pymol_instance.results_dict, json_file, indent=4)
 
     # Convert the results dictionary to a dataframe and write to csv and xlsx files
     pymol_instance.results_dict_to_df()
@@ -293,12 +301,57 @@ def visualise_top_x(results:dict, top_x:int, reference_obj:str):
         cmd.save(f'{m}.pse')
         cmd.reinitialize()
 
+def make_dendrogram():
+    # Load data from CSV into DataFrame
+    df = pd.read_csv('tmmatrix-20240216.csv', index_col=0)
+
+    # Invert the DataFrame (subtract each value from 1)
+    inverted_df = 1 - df
+
+    # Convert full distance matrix to condensed matrix
+    similarity_matrix = inverted_df.values
+    condensed_matrix = squareform(similarity_matrix)
+
+    # Compute hierarchical clustering
+    # average = UPGMA
+    # single = nearest neighbour/minimum evolution (good for large datasets)
+    Z = linkage(condensed_matrix, method='average')
+
+
+    # Plot dendrogram
+    plt.figure(figsize=(8, 6))
+    dendrogram(Z, orientation='left', labels=inverted_df.index.tolist(), leaf_font_size=8)
+
+    # Plot the circular dendrogram
+    plt.title('TMalign Score (Structural) Dendrogram')
+    plt.show()
+
 def main():
     reference_obj, alignment_results = align()
+
+
     visualise_top_x(alignment_results, 25, reference_obj)
 
+def debug():
+    debug_instance = PyMOLAlign('ranked_0')
+    with open('results.json', 'r', encoding='UTF8') as file:
+        debug_instance.results_dict = json.load(file)
+    print(debug_instance.results_dict)
+
+    obj_list = [model for model, results in debug_instance.results_dict.items()]
+    unique_model_list = get_unique_models(obj_list, 100)
+    
+    for o in unique_model_list:
+        cmd.load(f'{o}.cif')
+    cmd.remove('resn hoh')
+    debug_instance.tm_matrix()
+
+    df_to_file(debug_instance.tmmatrix, 'tmmatrix', 'csv')
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    debug()
 
 # Jobs for Saturday:
     # Lint Code
