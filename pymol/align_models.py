@@ -39,10 +39,6 @@ Raw alignment score:\t\t\t{self.score_initial}
 # of residues aligned:\t\t\t{self.nalign_res}
 ''')
 
-    @property
-    def rmsd(self):
-        return self.rmsd_refined
-
 class PyMOLcealign():
     def __init__(self, ce_results) -> None:
         # Raw RMSD results
@@ -52,24 +48,21 @@ class PyMOLcealign():
         # Alignment length
         self.nalign = self.ce_results['alignment_length']
         # Rotation matrix
-        self.rotation_matrix = np.array(self.ce_results['rotation_matrix'])
+        self.rotation_matrix = np.array(self.ce_results['rotation_matrix']).reshape(4,4)
 
     def show_results(self):
         print(f'''
 RMSD after refinement:\t\t\t{self.rmsd}
 # of aligned atoms after refinement:\t{self.nalign}
-Model Rotation Matrix:
+Model Rotation Matrix:\n{self.rotation_matrix}
 ''')
-
-    @property
-    def rmsd(self):
-        return self.rmsd
 
 class PyMOLAlign():
     def __init__(self, reference_object:str) -> None:
         self.ref = reference_object
-        self.obj_list = PyMOLAlign.non_sele_objs()
+        self.obj_list = PyMOLAlign.non_sele_objs(self)
         self.results_dict = {}
+        self.results_df = None
 
     def non_sele_objs(self):
         # Get a list of all object loaded into PyMOL, excluding 'sele'
@@ -88,7 +81,7 @@ class PyMOLAlign():
         for obj in self.obj_list:
             if obj != self.ref:
                 print(f'\nAligning based on sequence (align):\t{obj}')
-                rms = cmd.align(obj, self.ref)
+                rms = cmd.align(obj, self.ref, cycles=10)
                 align_result_parser = PyMOLRMS(rms)
                 align_result_parser.show_results()
                 sub_results_dict = {'align': [align_result_parser.rmsd_refined,
@@ -117,56 +110,24 @@ class PyMOLAlign():
 
     def results_dict_to_df(self):
         # Convert the alignment results dictionary to a dataframe
-        if not self.df:
-            self.df = pd.DataFrame.from_dict(self.results_dict, orient='index')
+        if not self.results_df:
+            self.results_df = pd.DataFrame.from_dict(self.results_dict, orient='index')
             # Expand lists and assign elements to new columns
-            self.df[['align_RMSD', 'align_nres']] = self.df['align'].apply(pd.Series)
-            self.df[['cealign_RMSD', 'cealign_nres']] = self.df['cealign'].apply(pd.Series)
-            self.df[['super_RMSD', 'super_nres']] = self.df['super'].apply(pd.Series)
+            self.results_df[['align_RMSD', 'align_nres']] = self.results_df['align'].apply(pd.Series)
+            self.results_df[['cealign_RMSD', 'cealign_nres']] = self.results_df['cealign'].apply(pd.Series)
+            self.results_df[['super_RMSD', 'super_nres']] = self.results_df['super'].apply(pd.Series)
 
             # Drop the original columns with lists
-            self.df.rename(columns={'tmalign': 'TM-align'}, inplace=True)
-            self.df.drop(['align', 'cealign', 'super'], axis=1, inplace=True)
+            self.results_df.rename(columns={'tmalign': 'TM-align'}, inplace=True)
+            self.results_df.drop(['align', 'cealign', 'super'], axis=1, inplace=True)
 
-        return self.df
-
-    def df_to_csv(self, dataframe:pd.DataFrame, filename:str, index_label:str=None):
-        # Write alignment results dataframe to a csv file
-        current_date = datetime.datetime.now().strftime('%Y%m%d')
-        if index_label:
-            dataframe.to_csv(f'{filename}-{current_date}.csv', index=True, index_label=index_label)
-        else:
-            dataframe.to_csv(f'{filename}-{current_date}.csv', index=True)
-
-    def df_to_xlsx(self, dataframe:pd.DataFrame, filename:str, index_label:str=None):
-        # Write alignment results dataframe to a xlsx file
-        # Add second sheet with reminder text here
-        current_date = datetime.datetime.now().strftime('%Y%m%d')
-        if index_label:
-            dataframe.to_csv(f'{filename}-{current_date}.xlsx', index=True, index_label=index_label)
-        else:
-            dataframe.to_csv(f'{filename}-{current_date}.xlsx', index=True)
+        return self.results_df
 
     def tm_matrix(self):
         # Generate a matrix of TMalign scores to build a structural dendrogram
-
         # Create a list of unique PDB codes ordered by their TMalign score
-        unique_model_set = set()
-        unique_model_list = []
         model_list = [model for model, results in self.results_dict.items()]
-        for m in model_list:
-            # 100 models max to limit the numner of permutations
-            if len(unique_model_list) < 100:
-                # Could check for duplicates of first 2 letters of pdb code to find proteins from different sources
-                if m.split('-')[0] not in unique_model_set:
-                    unique_model_set.add(m.split('-')[0])
-                    unique_model_list.append(m)
-                else:
-                    pass
-            else:
-                break
-
-        print(unique_model_list)
+        unique_model_list = get_unique_models(model_list, top_x=100)
 
         self.tmmatrix = pd.DataFrame(index=unique_model_list, columns=unique_model_list)
         for pair in permutations(unique_model_list, 2):
@@ -184,6 +145,47 @@ class PyMOLAlign():
             self.tmmatrix.loc[obj,obj] = 1.0
 
         return self.tmmatrix
+    
+    def get_sequence_length(self, object_name):
+        cmd.alter(object_name, 'resi = resi + 1')
+        sequence_length = cmd.count_atoms(f'{object_name} and name CA')
+        return sequence_length
+
+
+def get_unique_models(model_list:list, top_x:int=25):
+    # Used for checking duplicates
+    unique_model_set = set()
+    unique_model_list = []
+
+    # Create a list of unique PDB codes ordered by their TMalign score
+    for m in model_list:
+        if len(unique_model_list) < top_x:
+            # Could check for duplicates of first 2 letters of pdb code to find proteins from different sources
+            if m.split('-')[0] not in unique_model_set:
+                unique_model_set.add(m.split('-')[0])
+                unique_model_list.append(m)
+            else:
+                pass
+        else:
+            break
+ 
+    return unique_model_list
+
+def df_to_file(dataframe:pd.DataFrame, filename:str, filetype:str='csv', index_label:str=None):
+    # Write alignment results dataframe to a csv (default) or excel file
+    method_map = {
+        'csv': dataframe.to_csv,
+        'xlsx': dataframe.to_excel
+    }
+    
+    current_date = datetime.datetime.now().strftime('%Y%m%d')
+    if filetype not in ['csv', 'xlsx']:
+        raise ValueError('Invalid filetype specified. Please use "csv" or "xlsx".')
+    else:
+        if index_label:
+            method_map[filetype](f'{filename}-{current_date}.{filetype}', index=True, index_label=index_label)
+        else:
+            method_map[filetype](f'{filename}-{current_date}.{filetype}', index=True)
 
 def script_args():
     parser = ArgumentParser()
@@ -225,26 +227,30 @@ def align():
         print('-' * 100)
         alignment_algorithm()
 
+    # Sort results_dict by TMalign score
+    pymol_instance.results_dict = dict(sorted(pymol_instance.results_dict.items(), key=lambda item: item[1]['tmalign'], reverse=True))
+
     # Write results to a JSON file (mainly for testing)
     with open('results.json', 'w', encoding='UTF8') as json_file:
-        results_sorted_by_tm = dict(sorted(pymol_instance.results_dict.items(),
-                                           key=lambda item: item[1]["tmalign"], reverse=True))
-        json.dump(results_sorted_by_tm, json_file, indent=4)
+        json.dump(pymol_instance.results_dicz, json_file, indent=4)
 
     # Convert the results dictionary to a dataframe and write to csv and xlsx files
     pymol_instance.results_dict_to_df()
-    pymol_instance.df_to_csv(dataframe=pymol_instance.df,
-                             filename=f'{pymol_instance.ref}-alignment-',
-                             index_label='PDB_code_with_chain')
-    pymol_instance.df_to_xlsx(dataframe=pymol_instance.df,
-                             filename=f'{pymol_instance.ref}-alignment-',
-                             index_label='PDB_code_with_chain')
+    df_to_file(dataframe=pymol_instance.results_df,
+                             filename=f'{pymol_instance.ref}-alignment',
+                             index_label='PDB_code_with_chain',
+                             filetype='csv')
+    df_to_file(dataframe=pymol_instance.results_df,
+                             filename=f'{pymol_instance.ref}-alignment',
+                             index_label='PDB_code_with_chain',
+                             filetype='xlsx')
 
     # Calculate TMalign score matrix
         # Used to create a structural dendrogram
     pymol_instance.tm_matrix()
-    pymol_instance.df_to_xlsx(dataframe=pymol_instance.tmmatrix,
-                             filename=f'tmalign-matrix')
+    df_to_file(dataframe=pymol_instance.tmmatrix,
+                             filename=f'tmalign-matrix',
+                             filetype='csv')
 
     return pymol_instance.ref, pymol_instance.results_dict
 
@@ -252,24 +258,9 @@ def visualise_top_x(results:dict, top_x:int, reference_obj:str):
     # Create PyMOL sessions for the top x PDBs with the highest TMalign scores
     # Only 1 chain per PDB code is used (often there are identical chains in the same PDB) 
 
-    # Used for checking duplicates
-    unique_model_set = set()
-    unique_model_list = []
-
     # Create a list of unique PDB codes ordered by their TMalign score
     model_list = [model for model, results in results.items()]
-    for m in model_list:
-        if len(unique_model_list) < top_x:
-            # Could check for duplicates of first 2 letters of pdb code to find proteins from different sources
-            if m.split('-')[0] not in unique_model_set:
-                unique_model_set.add(m.split('-')[0])
-                unique_model_list.append(m)
-            else:
-                pass
-        else:
-            break
-
-    print(unique_model_list)
+    unique_model_list = get_unique_models(model_list, top_x)
 
     # Open and align copies of the chain for each alignment method
     # PLACEHOLDER! DOES NOT WORK YET!
@@ -296,9 +287,6 @@ def visualise_top_x(results:dict, top_x:int, reference_obj:str):
 
 def main():
     reference_obj, alignment_results = align()
-    # with open('results.json', 'r', encoding='UTF8') as results_json:
-    #     alignment_results = json.load(results_json)
-
     visualise_top_x(alignment_results, 25, reference_obj)
 
 if __name__ == '__main__':
@@ -311,3 +299,5 @@ if __name__ == '__main__':
     # name objects in visualise_top_x based on RMSD/TMalign score
     # make visualise_top_x add column to alignment table that indicates which ones have a pymol session
     # Move finding unique pdbs in a list to its own function (currently its copied twice)
+    # make tmalign_matrix check for object sequence size, then only calculate tmalign scores normalised to the smaller of the two
+        # Cuts number of tmalign calculations in half (combinations instead of permutations)
