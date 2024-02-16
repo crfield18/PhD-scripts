@@ -146,11 +146,19 @@ class PyMOLAlign():
 
         return self.tmmatrix
     
-    def get_sequence_length(self, object_name):
-        cmd.alter(object_name, 'resi = resi + 1')
-        sequence_length = cmd.count_atoms(f'{object_name} and name CA')
-        return sequence_length
+def get_sequence_length(object_name):
+    # Count the number of CA atoms in given object
+    sequence_length = cmd.count_atoms(f'{object_name} and name CA')
+    return sequence_length
 
+def get_smaller_object(object_1:str, object_2:str):
+    # Get the shorter of 2 objects in PyMOL
+    obj_1_len = get_sequence_length(object_1)
+    obj_2_len = get_sequence_length(object_2)
+
+    if obj_1_len <= obj_2_len:
+        return object_1
+    return object_2
 
 def get_unique_models(model_list:list, top_x:int=25):
     # Used for checking duplicates
