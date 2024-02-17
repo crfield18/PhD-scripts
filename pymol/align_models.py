@@ -1,19 +1,18 @@
-import datetime
-from itertools import permutations
 import json
+import datetime
+from argparse import ArgumentParser
+from itertools import combinations
 from math import isnan
 from pathlib import Path
-from argparse import ArgumentParser
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pymol import cmd
-import psico.fullinit
+import psico.fullinit # Needed to add tmalign to PyMOL
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import squareform
-import matplotlib.pyplot as plt
 
-
-class PyMOLRMS():
+class PyMOLalign():
     def __init__(self, rms_results) -> None:
         # Raw RMSD results
         self.rms_results = rms_results
@@ -43,6 +42,9 @@ Raw alignment score:\t\t\t{self.score_initial}
 # of residues aligned:\t\t\t{self.nalign_res}
 ''')
 
+    def store_results(self, algorithm:str):
+        return {algorithm:[self.rmsd_refined,self.nalign_res]}
+
 class PyMOLcealign():
     def __init__(self, ce_results) -> None:
         # Raw RMSD results
@@ -61,10 +63,13 @@ RMSD after refinement:\t\t\t{self.rmsd}
 Model Rotation Matrix:\n{self.rotation_matrix}
 ''')
 
-class PyMOLAlign():
+    def store_results(self):
+        return {'cealign':[self.rmsd,self.nalign]}
+
+class PyMOLAlignAll():
     def __init__(self, reference_object:str) -> None:
         self.ref = reference_object
-        self.obj_list = PyMOLAlign.non_sele_objs(self)
+        self.obj_list = self.non_sele_objs()
         self.results_dict = {}
         self.results_df = None
 
@@ -85,41 +90,46 @@ class PyMOLAlign():
         for obj in self.obj_list:
             if obj != self.ref:
                 print(f'\nAligning based on sequence (align):\t{obj}')
-                rms = cmd.align(obj, self.ref, cycles=10)
-                align_result_parser = PyMOLRMS(rms)
+                align_result_parser = PyMOLalign(cmd.align(obj, self.ref, cycles=10))
                 align_result_parser.show_results()
-                sub_results_dict = {'align': [align_result_parser.rmsd_refined,
-                                              align_result_parser.nalign_res]}
+                sub_results_dict = align_result_parser.store_results(algorithm='align')
                 self.results_dict.setdefault(obj, {}).update(sub_results_dict)
 
     def cealign_all(self):
         for obj in self.obj_list:
             if obj != self.ref:
                 print(f'\nAligning based on structure (cealign):\t{obj}')
-                rms = cmd.cealign(self.ref, obj)
-                cealign_result_parser = PyMOLcealign(rms)
+                cealign_result_parser = PyMOLcealign(cmd.cealign(self.ref, obj))
                 cealign_result_parser.show_results()
-                sub_results_dict = {'cealign': [cealign_result_parser.rmsd, cealign_result_parser.nalign]}
+                sub_results_dict = cealign_result_parser.store_results()
                 self.results_dict.setdefault(obj, {}).update(sub_results_dict)
 
     def super_all(self):
         for obj in self.obj_list:
             if obj != self.ref:
                 print(f'\nSuperimposing (super):\t{obj}')
-                align_result_parser = PyMOLRMS(rms_results=cmd.super(obj, self.ref))
+                align_result_parser = PyMOLalign(cmd.super(obj, self.ref))
                 align_result_parser.show_results()
-                sub_results_dict = {'super': [align_result_parser.rmsd_refined,
-                                              align_result_parser.nalign_res]}
+                sub_results_dict = align_result_parser.store_results(algorithm='super')
                 self.results_dict.setdefault(obj, {}).update(sub_results_dict)
+
+    def show_results_dict(self):
+        print(self.results_dict)
+
+    def get_results_dict(self):
+        return self.results_dict
 
     def results_dict_to_df(self):
         # Convert the alignment results dictionary to a dataframe
         if not self.results_df:
             self.results_df = pd.DataFrame.from_dict(self.results_dict, orient='index')
             # Expand lists and assign elements to new columns
-            self.results_df[['align_RMSD', 'align_nres']] = self.results_df['align'].apply(pd.Series)
-            self.results_df[['cealign_RMSD', 'cealign_nres']] = self.results_df['cealign'].apply(pd.Series)
-            self.results_df[['super_RMSD', 'super_nres']] = self.results_df['super'].apply(pd.Series)
+            self.results_df[['align_RMSD',
+                             'align_nres']] = self.results_df['align'].apply(pd.Series)
+            self.results_df[['cealign_RMSD',
+                             'cealign_nres']] = self.results_df['cealign'].apply(pd.Series)
+            self.results_df[['super_RMSD',
+                             'super_nres']] = self.results_df['super'].apply(pd.Series)
 
             # Drop the original columns with lists
             self.results_df.rename(columns={'tmalign': 'TM-align'}, inplace=True)
@@ -127,46 +137,87 @@ class PyMOLAlign():
 
         return self.results_df
 
-    def tm_matrix(self):
+class TMalignMatrix():
+    def __init__(self, align_all_results:dict) -> None:
+        self.results = align_all_results
+        self.tmmatrix = pd.DataFrame()
+
+    def get_sequence_length(self, object_name):
+        # Count the number of CA atoms in given object
+        sequence_length = cmd.count_atoms(f'{object_name} and name CA')
+        return sequence_length
+
+    def calculate_matrix(self, save_temp:bool):
         # Generate a matrix of TMalign scores to build a structural dendrogram
         # Create a list of unique PDB codes ordered by their TMalign score
-        model_list = [model for model, results in self.results_dict.items()]
+        model_list = [model for model, results in self.results.items()]
         unique_model_list = get_unique_models(model_list, top_x=100)
 
         self.tmmatrix = pd.DataFrame(index=unique_model_list, columns=unique_model_list)
-        for pair in permutations(unique_model_list, 2):
-            print(pair)
-            tm = cmd.tmalign(pair[0], pair[1])
 
-            if tm > self.tmmatrix.loc[pair[0], pair[1]] or isnan(self.tmmatrix.loc[pair[0], pair[1]]):
+        # Calculate TMalign scores for all unique combinations of models
+            # This would be more efficient if storing values in a list/dict
+            # Directly updating the dataframe makes the data easier to parse visually
+            # The real bottleneck here is going to TMalign anyway so I'm leaving it
+        for pair in combinations(unique_model_list, 2):
+            print(pair)
+            if isnan(self.tmmatrix.loc[pair[0], pair[1]]) or isnan(self.tmmatrix.loc[pair[1], pair[0]]):
+                # Set the smaller object as the reference (target) object
+                object_1_length = self.get_sequence_length(pair[0])
+                object_2_length = self.get_sequence_length(pair[1])
+
+                if object_1_length >= object_2_length:
+                    target = pair[1]
+                    mobile = pair[0]
+                elif object_1_length < object_2_length:
+                    target = pair[0]
+                    mobile = pair[1]
+                
+                tm = cmd.tmalign(mobile, target)
+
                 self.tmmatrix.loc[pair[0], pair[1]] = tm
                 self.tmmatrix.loc[pair[1], pair[0]] = tm
-            
-            print(self.tmmatrix)
 
-        # Fill the diagonal with TMscores of 1
-            # Identical proteins give a TMscore of 1
+                self.show_matrix()
+    
+        # Save results as they are calculated to cut down on recalculating TMalign scores
+        # after a crash or a restart
+        if save_temp:
+            df_to_file(self.tmmatrix, filename='tmalign-matrix', filetype='csv')
+
+        # Fill the diagonal with TMscores of 1 (always the score for identical proteins)
             # ∴ We do not need to run any calculations
         for obj in unique_model_list:
             self.tmmatrix.loc[obj,obj] = 1.0
         
-        print(self.tmmatrix)
-
+        self.show_matrix()
         return self.tmmatrix
     
-def get_sequence_length(object_name):
-    # Count the number of CA atoms in given object
-    sequence_length = cmd.count_atoms(f'{object_name} and name CA')
-    return sequence_length
+    def show_matrix(self):
+        print(self.tmmatrix)
 
-def get_smaller_object(object_1:str, object_2:str):
-    # Get the shorter of 2 objects in PyMOL
-    obj_1_len = get_sequence_length(object_1)
-    obj_2_len = get_sequence_length(object_2)
+    def get_matrix(self):
+        return self.tmmatrix
+    
+    def make_dendrogram(self):
+        # Invert the DataFrame (subtract each value from 1)
+        inverted_df = 1 - self.tmmatrix
 
-    if obj_1_len <= obj_2_len:
-        return object_1
-    return object_2
+        # Convert full distance matrix to condensed matrix
+        similarity_matrix = inverted_df.values
+        condensed_matrix = squareform(similarity_matrix)
+
+        # Compute hierarchical clustering
+        # average = UPGMA
+        # single = nearest neighbour/minimum evolution (good for large datasets)
+        Z = linkage(condensed_matrix, method='average')
+
+        # Plot dendrogram
+        plt.figure(figsize=(8, 6))
+        dendrogram(Z, orientation='left', labels=inverted_df.index.tolist(), leaf_font_size=8)
+        plt.title('TMalign Score (Structural) Dendrogram')
+        plt.show()
+        plt.savefig('tmalign-score-dendrogram.png', transparent=None, dpi=300)
 
 def get_unique_models(model_list:list, top_x:int=25):
     # Used for checking duplicates
@@ -180,8 +231,6 @@ def get_unique_models(model_list:list, top_x:int=25):
             if m.split('-')[0] not in unique_model_set:
                 unique_model_set.add(m.split('-')[0])
                 unique_model_list.append(m)
-            else:
-                pass
         else:
             break
  
@@ -197,11 +246,10 @@ def df_to_file(dataframe:pd.DataFrame, filename:str, filetype:str='csv', index_l
     current_date = datetime.datetime.now().strftime('%Y%m%d')
     if filetype not in ['csv', 'xlsx']:
         raise ValueError('Invalid filetype specified. Please use "csv" or "xlsx".')
+    if index_label:
+        method_map[filetype](f'{filename}-{current_date}.{filetype}', index=True, index_label=index_label)
     else:
-        if index_label:
-            method_map[filetype](f'{filename}-{current_date}.{filetype}', index=True, index_label=index_label)
-        else:
-            method_map[filetype](f'{filename}-{current_date}.{filetype}', index=True)
+        method_map[filetype](f'{filename}-{current_date}.{filetype}', index=True)
 
 def script_args():
     parser = ArgumentParser()
@@ -233,7 +281,7 @@ def align():
     cmd.remove('resn hoh')
 
     # Initialise a PyMOL instance and set the reference object
-    pymol_instance = PyMOLAlign(cif_ref_path.stem)
+    pymol_instance = PyMOLAlignAll(cif_ref_path.stem)
 
     # Align all other objects to the reference using align, cealign, super and tmalign
     for alignment_algorithm in (pymol_instance.align_all,
@@ -252,21 +300,23 @@ def align():
 
     # Convert the results dictionary to a dataframe and write to csv and xlsx files
     pymol_instance.results_dict_to_df()
-    df_to_file(dataframe=pymol_instance.results_df,
-                             filename=f'{pymol_instance.ref}-alignment',
-                             index_label='PDB_code_with_chain',
-                             filetype='csv')
-    df_to_file(dataframe=pymol_instance.results_df,
-                             filename=f'{pymol_instance.ref}-alignment',
-                             index_label='PDB_code_with_chain',
-                             filetype='xlsx')
+    for extension in ('csv', 'xlsx'):
+        df_to_file(dataframe=pymol_instance.results_df,
+                                filename=f'{pymol_instance.ref}-alignment',
+                                index_label='PDB_code_with_chain',
+                                filetype=extension)
 
     # Calculate TMalign score matrix
         # Used to create a structural dendrogram
-    pymol_instance.tm_matrix()
-    df_to_file(dataframe=pymol_instance.tmmatrix,
-                             filename=f'tmalign-matrix',
-                             filetype='csv')
+    
+    tmmatrix = TMalignMatrix(pymol_instance.results_dict)
+
+    tmmatrix.calculate_matrix(save_temp=True)
+
+    for extension in ('csv', 'xlsx'):
+        df_to_file(dataframe=tmmatrix.get_matrix,
+                                filename='tmalign-matrix',
+                                filetype=extension)
 
     return pymol_instance.ref, pymol_instance.results_dict
 
@@ -301,64 +351,15 @@ def visualise_top_x(results:dict, top_x:int, reference_obj:str):
         cmd.save(f'{m}.pse')
         cmd.reinitialize()
 
-def make_dendrogram():
-    # Load data from CSV into DataFrame
-    df = pd.read_csv('tmmatrix-20240216.csv', index_col=0)
-
-    # Invert the DataFrame (subtract each value from 1)
-    inverted_df = 1 - df
-
-    # Convert full distance matrix to condensed matrix
-    similarity_matrix = inverted_df.values
-    condensed_matrix = squareform(similarity_matrix)
-
-    # Compute hierarchical clustering
-    # average = UPGMA
-    # single = nearest neighbour/minimum evolution (good for large datasets)
-    Z = linkage(condensed_matrix, method='average')
-
-
-    # Plot dendrogram
-    plt.figure(figsize=(8, 6))
-    dendrogram(Z, orientation='left', labels=inverted_df.index.tolist(), leaf_font_size=8)
-
-    # Plot the circular dendrogram
-    plt.title('TMalign Score (Structural) Dendrogram')
-    plt.show()
-
 def main():
     reference_obj, alignment_results = align()
 
-
     visualise_top_x(alignment_results, 25, reference_obj)
 
-def debug():
-    debug_instance = PyMOLAlign('ranked_0')
-    with open('results.json', 'r', encoding='UTF8') as file:
-        debug_instance.results_dict = json.load(file)
-    print(debug_instance.results_dict)
-
-    obj_list = [model for model, results in debug_instance.results_dict.items()]
-    unique_model_list = get_unique_models(obj_list, 100)
-    
-    for o in unique_model_list:
-        cmd.load(f'{o}.cif')
-    cmd.remove('resn hoh')
-    debug_instance.tm_matrix()
-
-    df_to_file(debug_instance.tmmatrix, 'tmmatrix', 'csv')
-
-
 if __name__ == '__main__':
-    # main()
-    debug()
+    main()
 
 # Jobs for Saturday:
-    # Lint Code
     # Separate results generation to its own function probably
     # Add reminder sheet to excel doc with basic info on each alignment algorithm/how to interpret scores
     # name objects in visualise_top_x based on RMSD/TMalign score
-    # make visualise_top_x add column to alignment table that indicates which ones have a pymol session
-    # Move finding unique pdbs in a list to its own function (currently its copied twice)
-    # make tmalign_matrix check for object sequence size, then only calculate tmalign scores normalised to the smaller of the two
-        # Cuts number of tmalign calculations in half (combinations instead of permutations)
