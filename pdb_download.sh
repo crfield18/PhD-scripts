@@ -18,7 +18,7 @@ mkdir -p "$output_dir"
 # Loop through the PDB IDs
 for pdb in "${pdb_list[@]}"; do
     # Define the output file path
-    output_file="$output_dir/$pdb/$pdb.pdb"
+    output_file="$output_dir/$pdb.pdb"
 
     # Check if the file already exists and is not empty
     if [ -s "$output_file" ]; then
