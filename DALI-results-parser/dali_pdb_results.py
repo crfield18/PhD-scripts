@@ -81,7 +81,7 @@ class DaliResults:
 
     def pdb_links(self):
         dali_pdbs = {}
-        with open(self.dir_dali / 's001A.html', 'r', encoding='UTF8') as results_html:
+        with open(self.dir_dali / f'{self.job_id}.html', 'r', encoding='UTF8') as results_html:
             for line in results_html:
                 if 'VALUE="cd2=' not in line:
                     pass
@@ -103,9 +103,9 @@ class DaliResults:
                                        unit=' PDBs'):
             output_pdb = self.dir_pdb_aligned / f'{code}.pdb'
             if not output_pdb.exists():
-                print(f'\rDownloading:\t{code}.pdb', end='', flush=True)
+                print(f'\n\rDownloading:\t{code}.pdb', end='', flush=True)
                 wget.download(url=download_url, out=str(output_pdb))
-                print(f'\rCleaning:\t{code}.pdb', end='', flush=True)
+                print(f'\n\rCleaning:\t{code}.pdb', end='', flush=True)
                 html_to_pdb(output_pdb)
             else:
                 print(f'\r{code}.pdb found. Skipping...', end='', flush=True)
@@ -184,3 +184,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

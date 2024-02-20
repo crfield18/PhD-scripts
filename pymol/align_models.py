@@ -11,6 +11,8 @@ from pymol import cmd
 import psico.fullinit # Needed to add tmalign to PyMOL
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import squareform
+# Look into radialtree to draw circular dendrograms
+
 
 class PyMOLalign():
     def __init__(self, rms_results) -> None:
