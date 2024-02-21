@@ -37,6 +37,48 @@ def html_to_pdb(pdb_file):
         file.writelines(filtered_lines)
         file.truncate()
 
+# Parser for the coordinates section of a pdb file
+# https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html
+class PDBCoordsParser: 
+    def __init__(self, atom_line: str) -> None:
+        # Atom serial number
+        self.atom_line = atom_line
+        self.record_name = atom_line[0:6]
+        # Atom serial number
+        self.serial = atom_line[6:11]
+        # Atom name
+        self.name = atom_line[12:16]
+        # Alternate location indicator
+        self.altLoc = atom_line[16]
+        # Residue name
+        self.resName = atom_line[17:20]
+        # Chain identifier
+        self.chainID = atom_line[21]
+        # Residue sequence number
+        self.resSeq = atom_line[22:26]
+        # Code for insertion of residues
+        self.iCode = atom_line[26]
+        # Orthogonal coordinates for X in Angstroms
+        self.x = atom_line[30:38]
+        # Orthogonal coordinates for Y in Angstroms
+        self.y = atom_line[38:46]
+        # Orthogonal coordinates for Z in Angstroms
+        self.z = atom_line[46:54]
+        # Occupancy
+        self.occupancy = atom_line[54:60]
+        # Temperature factor
+        self.tempFactor = atom_line[60:66]
+        # Element symbol, right-justified
+        self.element = atom_line[76:78]
+        # Charge on the atom
+        self.charge = atom_line[78:80]
+    
+    def get_atom_line(self):
+        return self.atom_line
+
+    def get_chainID(self):
+        return self.chainID
+
 class DaliResults:
     def __init__(self) -> None:
         self.results_url = script_args().input
@@ -49,7 +91,7 @@ class DaliResults:
         directories = {
             'dir_dali': 'dali_results_pages',
             'dir_pdb_aligned': 'pdb_dali_aligned',
-            'dir_pdb_clean': 'pdb_unaligned'
+            'dir_pdb_clean': 'pdb_chains'
         }
 
         for name, dirname in directories.items():
@@ -100,12 +142,12 @@ class DaliResults:
     def aligned_pdb_download(self):
         for code, download_url in tqdm(self.dali_pdbs.items(),
                                        desc='',
-                                       unit=' PDBs'):
+                                       unit=' PDB'):
             output_pdb = self.dir_pdb_aligned / f'{code}.pdb'
             if not output_pdb.exists():
-                print(f'\n\rDownloading:\t{code}.pdb', end='', flush=True)
+                print(f'\rDownloading:\t{code}.pdb', end='', flush=True)
                 wget.download(url=download_url, out=str(output_pdb))
-                print(f'\n\rCleaning:\t{code}.pdb', end='', flush=True)
+                print(f'\rCleaning:\t{code}.pdb', end='', flush=True)
                 html_to_pdb(output_pdb)
             else:
                 print(f'\r{code}.pdb found. Skipping...', end='', flush=True)
@@ -170,6 +212,34 @@ class DaliResults:
                         # print(f'Chain {chain} not found in {cif}.cif. Skipping...')
                         continue
 
+    def isolate_aligned_pdb_chain(self):
+        unique_pdbs = {}
+
+        # Create a list of all uniquie pdb codes and the chains associated
+        for file_path in self.dir_pdb_aligned.iterdir():
+            if file_path.is_file():
+                pdb_code = str(file_path.stem[0:4])
+                chain_id = file_path.stem[4]
+
+                if pdb_code not in unique_pdbs:
+                    unique_pdbs[pdb_code] = list(chain_id)
+                else:
+                    unique_pdbs[pdb_code].append(chain_id)
+
+        print(unique_pdbs)
+
+    
+        for pdb, chain_list in tqdm(unique_pdbs.items(),
+                                    desc='Splitting',
+                                    unit=' file'):
+            for chain in chain_list:
+                with open(self.dir_pdb_aligned / f'{pdb}{chain}.pdb', 'r') as input_file, open(self.dir_pdb_clean / f'{pdb}-{chain}.pdb', 'w') as output_file:
+                    for line in input_file:
+                        if line.startswith('ATOM') and PDBCoordsParser(line).get_chainID() == chain:
+                            output_file.writelines(line)
+                    output_file.writelines('TER')
+
+
 def main():
     dali_job = DaliResults()
     # Download all the DALI results pages
@@ -177,11 +247,13 @@ def main():
     # Extract all of the DALI-aligned PDB file download links
     dali_job.pdb_links()
     # Download all the DALI-aligned PDB files
-    # Maybe set an RMSD limit so you're not downloading ~5000 pdb files (e.g. 2.5 Å ?)
     dali_job.aligned_pdb_download()
 
-    dali_job.cif_download()
+    # # Download clean versions of each aligned structure in mmCIF format
+    # dali_job.cif_download()
+
+    # Extract the specified chain from each Dali aligned PDB file
+    dali_job.isolate_aligned_pdb_chain()
 
 if __name__ == '__main__':
     main()
-
