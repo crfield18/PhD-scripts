@@ -1,3 +1,4 @@
+import glob
 import json
 import datetime
 from argparse import ArgumentParser
@@ -155,7 +156,12 @@ class TMalignMatrix():
         model_list = [model for model, results in self.results.items()]
         unique_model_list = get_unique_models(model_list, top_x=100)
 
-        self.tmmatrix = pd.DataFrame(index=unique_model_list, columns=unique_model_list)
+        try:
+            self.tmmatrix = pd.read_csv(glob.glob("*tmalign-matrix*.csv")[0], index_col=0)
+        except IndexError:
+            self.tmmatrix = pd.DataFrame(index=unique_model_list, columns=unique_model_list)
+
+        self.show_matrix()
 
         # Calculate TMalign scores for all unique combinations of models
             # This would be more efficient if storing values in a list/dict
@@ -182,10 +188,10 @@ class TMalignMatrix():
 
                 self.show_matrix()
     
-        # Save results as they are calculated to cut down on recalculating TMalign scores
-        # after a crash or a restart
-        if save_temp:
-            df_to_file(self.tmmatrix, filename='tmalign-matrix', filetype='csv')
+                # Save results as they are calculated to cut down on recalculating TMalign scores
+                # after a crash or a restart
+                if save_temp:
+                    df_to_file(self.tmmatrix, filename='tmalign-matrix', filetype='csv')
 
         # Fill the diagonal with TMscores of 1 (always the score for identical proteins)
             # ∴ We do not need to run any calculations
@@ -218,7 +224,9 @@ class TMalignMatrix():
         plt.figure(figsize=(8, 6))
         dendrogram(Z, orientation='left', labels=inverted_df.index.tolist(), leaf_font_size=8)
         plt.title('TMalign Score (Structural) Dendrogram')
-        plt.show()
+        axes = plt.gca()
+        axes.set_xlim(1,0)
+        # plt.show()
         plt.savefig('tmalign-score-dendrogram.png', transparent=None, dpi=300)
 
 def get_unique_models(model_list:list, top_x:int=25):
@@ -275,6 +283,7 @@ def align():
     # Load all pdb/cif files in cwd
     if cif_ref_path not in cif_list:
         cmd.load(cif_ref_path)
+
     for cif in cif_list:
         print(f'Loading: {cif}')
         cmd.load(cif)
@@ -290,8 +299,11 @@ def align():
                                 pymol_instance.cealign_all,
                                 pymol_instance.super_all,
                                 pymol_instance.tmalign_all):
-        print('-' * 100)
-        alignment_algorithm()
+        try:
+            print('-' * 100)
+            alignment_algorithm()
+        except:
+            pass
 
     # Sort results_dict by TMalign score
     pymol_instance.results_dict = dict(sorted(pymol_instance.results_dict.items(), key=lambda item: item[1]['tmalign'], reverse=True))
@@ -308,19 +320,24 @@ def align():
                                 index_label='PDB_code_with_chain',
                                 filetype=extension)
 
+
+    cmd.reinitialize()
+
     # Calculate TMalign score matrix
         # Used to create a structural dendrogram
-    
+
     tmmatrix = TMalignMatrix(pymol_instance.results_dict)
 
     tmmatrix.calculate_matrix(save_temp=True)
 
     for extension in ('csv', 'xlsx'):
-        df_to_file(dataframe=tmmatrix.get_matrix,
+        df_to_file(dataframe=tmmatrix.get_matrix(),
                                 filename='tmalign-matrix',
                                 filetype=extension)
 
-    return pymol_instance.ref, pymol_instance.results_dict
+    tmmatrix.make_dendrogram()
+
+    return pymol_instance.ref, cif_ref_path, pymol_instance.results_dict
 
 def visualise_top_x(results:dict, top_x:int, reference_obj:str):
     # Create PyMOL sessions for the top x PDBs with the highest TMalign scores
@@ -333,30 +350,30 @@ def visualise_top_x(results:dict, top_x:int, reference_obj:str):
     # Open and align copies of the chain for each alignment method
     # PLACEHOLDER! DOES NOT WORK YET!
     for m in unique_model_list:
-        cmd.load(f'{reference_obj}.pdb')
+        cmd.load(reference_obj)
         # CHANGE: Name objects '{algorithm}_{rmsd/tm to 4 d.p.}
         for method in ('align', 'cealign', 'super', 'tmalign'):
-            cmd.load(f'{m}.cif', f'{m}_{method}_{m}')
+            cmd.load(f'{m}.pdb', f'{m}_{method}_{m}')
 
         # print(cmd.get_names())
         cmd.remove('resn hoh')
-        cmd.cealign(reference_obj, f'{m}_cealign')
-        cmd.align(f'{m}_align', reference_obj)
-        cmd.super(f'{m}_super', reference_obj)
-        cmd.tmalign(f'{m}_tmalign', reference_obj)
+        cmd.cealign(reference_obj.stem, f'{m}_cealign')
+        cmd.align(f'{m}_align', reference_obj.stem)
+        cmd.super(f'{m}_super', reference_obj.stem)
+        cmd.tmalign(f'{m}_tmalign', reference_obj.stem)
 
         # 0.65 = 35% visible
-        cmd.set('cartoon_transparency', 0.65, f'(all and not {reference_obj})')
-        cmd.center(reference_obj)
+        cmd.set('cartoon_transparency', 0.65, f'(all and not {reference_obj.stem})')
+        cmd.center(reference_obj.stem)
         
         # Save pymol session file
         cmd.save(f'{m}.pse')
         cmd.reinitialize()
 
 def main():
-    reference_obj, alignment_results = align()
+    reference_obj, reference_obj_path, alignment_results = align()
 
-    visualise_top_x(alignment_results, 25, reference_obj)
+    visualise_top_x(alignment_results, 25, reference_obj_path)
 
 if __name__ == '__main__':
     main()
