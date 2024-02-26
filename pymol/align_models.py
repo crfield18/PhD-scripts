@@ -13,7 +13,9 @@ from pymol import cmd
 import psico.fullinit # Needed to add tmalign to PyMOL
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import squareform
-# Look into radialtree to draw circular dendrograms
+import math
+from Bio import Phylo
+from Bio.Phylo.TreeConstruction import DistanceTreeConstructor, DistanceMatrix
 
 
 class PyMOLalign():
@@ -145,6 +147,10 @@ class PyMOLAlignAll():
 
         return self.results_df
 
+    def excel_doc_reminder_text(self):
+        pass
+        # Add second sheet that contains info on each alignment algorithm
+
 class TMalignMatrix():
     def __init__(self, align_all_results:dict, reference_object:str) -> None:
         self.results = align_all_results
@@ -156,20 +162,37 @@ class TMalignMatrix():
         sequence_length = cmd.count_atoms(f'{object_name} and name CA')
         return sequence_length
 
-    def calculate_matrix(self, save_temp:bool):
-        cmd.reinitialize()
-        # Generate a matrix of TMalign scores to build a structural dendrogram
-        # Create a list of unique PDB codes ordered by their TMalign score
-        model_list = [model for model, results in self.results.items()]
-        unique_model_list = get_unique_models(model_list, top_x=100)
-        
-        for model in unique_model_list:
+    def get_model_list(self):
+        # Get a list of all models from the align_all results
+        return [model for model, results in self.results.items()]
+
+    def load_models_from_list(self, model_list):
+        # Load a list of models into pymol
+        for model in model_list:
             cmd.load(f'{model}.pdb')
+        return model_list
+
+    def calculate_matrix(self, unique_models:bool, save_temp:bool):
+        # Generate a matrix of TMalign scores to build a structural dendrogram
+
+        # Reinitialise pymol to unload any previously loaded models
+        cmd.reinitialize()
         
+        # Get a list of all the mdels from self.results
+        results_models_list = self.get_model_list()
+        
+        # If 
+        if unique_models:
+            # Create a list of the top 100 unique PDB codes ordered by their TMalign score
+            results_models_list = get_unique_models(model_list=results_models_list, top_x=100)
+
+        # Load models in
+        self.load_models_from_list(model_list=results_models_list)
+
         try:
             self.tmmatrix = pd.read_csv(glob.glob(f"{self.ref_obj}-tmalign-matrix*.csv")[0], index_col=0)
         except IndexError:
-            self.tmmatrix = pd.DataFrame(index=unique_model_list, columns=unique_model_list)
+            self.tmmatrix = pd.DataFrame(index=results_models_list, columns=results_models_list)
 
         self.show_matrix()
 
@@ -178,10 +201,10 @@ class TMalignMatrix():
             # Directly updating the dataframe makes the data easier to parse visually
             # The real bottleneck here is going to TMalign anyway so I'm leaving it
         
-        pairs = combinations(unique_model_list, 2)
+        pairs = combinations(results_models_list, 2)
         pairs_len = len(list(pairs))
         pair_counter = 0
-        for pair in combinations(unique_model_list, 2):
+        for pair in combinations(results_models_list, 2):
             pair_counter +=1
             print(f'\n{pair_counter}/{pairs_len}\n')
             
@@ -211,7 +234,7 @@ class TMalignMatrix():
 
         # Fill the diagonal with TMscores of 1 (always the score for identical proteins)
             # ∴ We do not need to run any calculations
-        for obj in unique_model_list:
+        for obj in results_models_list:
             self.tmmatrix.loc[obj,obj] = 1.0
         
         self.show_matrix()
@@ -227,23 +250,17 @@ class TMalignMatrix():
         # Invert the DataFrame (subtract each value from 1)
         inverted_df = 1 - self.tmmatrix
 
-        # Convert full distance matrix to condensed matrix
-        similarity_matrix = inverted_df.values
-        condensed_matrix = squareform(similarity_matrix)
+        lower_tri_df = inverted_df.where(np.tril(np.ones(inverted_df.shape)).astype(bool))
 
-        # Compute hierarchical clustering
-        # average = UPGMA
-        # single = nearest neighbour/minimum evolution (good for large datasets)
-        Z = linkage(condensed_matrix, method='average')
+        lower_tri_lists = [[value for value in row if not math.isnan(value)] for row in lower_tri_df.values.tolist()]
 
-        # Plot dendrogram
-        plt.figure(figsize=(8, 6))
-        dendrogram(Z, orientation='left', labels=inverted_df.index.tolist(), leaf_font_size=8)
-        plt.title('TMalign Score (Structural) Dendrogram')
-        axes = plt.gca()
-        axes.set_xlim(1,0)
-        # plt.show()
-        plt.savefig('tmalign-score-dendrogram.png', transparent=None, dpi=300)
+
+        test_matrix = DistanceMatrix(names=inverted_df.index.values.tolist(),matrix=lower_tri_lists)
+
+        constructor = DistanceTreeConstructor()
+        tree = constructor.upgma(test_matrix)
+
+        return tree        
 
 def get_unique_models(model_list:list, top_x:int=25):
     # Used for checking duplicates
@@ -296,34 +313,6 @@ def align():
     # Get the path for the user specified reference pdb/cif file
     cif_ref_path = user_args.reference.resolve()
 
-    # # Chunk size
-    # chunk_size = 500
-
-    # # Iterate over sections of CIFs up to 500 elements in length
-    # for i in range(0, len(cif_list), chunk_size):
-    #     chunk = cif_list[i:i+chunk_size]
-        
-    #     for cif in tqdm(chunk, desc='', unit='file'):
-    #         cmd.load(cif)
-
-    #         # Load all pdb/cif files in cwd
-    #     if cif_ref_path not in chunk:
-    #         cmd.load(cif_ref_path)
-
-    #     cmd.remove('resn hoh')
-    #     pymol_instance = PyMOLAlignAll(cif_ref_path.stem)
-    #     for alignment_algorithm in (pymol_instance.align_all,
-    #                                 pymol_instance.cealign_all,
-    #                                 pymol_instance.super_all,
-    #                                 pymol_instance.tmalign_all):
-
-    #         print('-' * 100)
-    #         alignment_algorithm()
-    #         with open(f'{pymol_instance.ref}-results.json', 'w', encoding='UTF8') as json_file:
-    #             json.dump(pymol_instance.results_dict, json_file, indent=4)
-
-    #     cmd.reinitialize()
-
     for cif in tqdm(cif_list, desc='', unit='file'):
         cmd.load(cif)
 
@@ -364,14 +353,16 @@ def align():
 
     tmmatrix = TMalignMatrix(align_all_results=pymol_instance.results_dict, reference_object=pymol_instance.ref)
 
-    tmmatrix.calculate_matrix(save_temp=True)
+    tmmatrix.calculate_matrix(unique_models=True, save_temp=True)
 
     for extension in ('csv', 'xlsx'):
         df_to_file(dataframe=tmmatrix.get_matrix(),
                                 filename=f'{tmmatrix.ref_obj}-tmalign-matrix',
                                 filetype=extension)
 
-    tmmatrix.make_dendrogram()
+    tree = tmmatrix.make_dendrogram()
+    
+    Phylo.write(tree, f'{tmmatrix.ref_obj}-tree.txt', 'newick')
 
     return cif_ref_path, pymol_instance.results_dict
 
@@ -410,12 +401,7 @@ def visualise_top_x(results:dict, top_x:int, reference_obj:Path):
 
 def main():
     reference_obj_path, alignment_results = align()
-    # visualise_top_x(alignment_results, 10, reference_obj_path)
+    visualise_top_x(alignment_results, 10, reference_obj_path)
 
 if __name__ == '__main__':
     main()
-
-# Jobs for Saturday:
-    # Separate results generation to its own function probably
-    # Add reminder sheet to excel doc with basic info on each alignment algorithm/how to interpret scores
-    # name objects in visualise_top_x based on RMSD/TMalign score
