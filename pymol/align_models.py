@@ -17,7 +17,6 @@ import math
 from Bio import Phylo
 from Bio.Phylo.TreeConstruction import DistanceTreeConstructor, DistanceMatrix
 
-
 class PyMOLalign():
     def __init__(self, rms_results) -> None:
         # Raw RMSD results
@@ -77,7 +76,7 @@ class PyMOLAlignAll():
         self.ref = reference_object
         self.obj_list = self.non_sele_objs()
         try:
-            with open(glob.glob("*results*.json")[0], 'r', encoding='UTF8') as results_json_file:
+            with open(glob.glob('*results*.json')[0], 'r', encoding='UTF8') as results_json_file:
                 self.results_dict = json.load(results_json_file)
         except IndexError:
             self.results_dict = {}
@@ -156,6 +155,7 @@ class TMalignMatrix():
         self.results = align_all_results
         self.ref_obj = reference_object
         self.tmmatrix = None
+        self.matrix_dict = {}
 
     def get_sequence_length(self, object_name):
         # Count the number of CA atoms in given object
@@ -190,14 +190,14 @@ class TMalignMatrix():
         self.load_models_from_list(model_list=results_models_list)
 
         try:
-            self.tmmatrix = pd.read_csv(glob.glob(f"{self.ref_obj}-tmalign-matrix*.csv")[0], index_col=0)
+            self.tmmatrix = pd.read_csv(glob.glob(f'{self.ref_obj}-tmalign-matrix*.csv')[0], index_col=0)
         except IndexError:
             self.tmmatrix = pd.DataFrame(index=results_models_list, columns=results_models_list)
 
         self.show_matrix()
 
         # Calculate TMalign scores for all unique combinations of models
-            # This would be more efficient if storing values in a list/dict
+            # This would be more efficient if storing values in a dict
             # Directly updating the dataframe makes the data easier to parse visually
             # The real bottleneck here is going to TMalign anyway so I'm leaving it
         
@@ -240,20 +240,69 @@ class TMalignMatrix():
         self.show_matrix()
         return self.tmmatrix
     
+    # # Looking to test this. Should be more efficient for non TMAlign bits than previous
+    # def calculate_matrix_hash_map_version(self, unique_models:bool, save_temp:bool):
+    #     cmd.reinitialize()
+
+    #     self.results_models_list = self.get_model_list()
+
+    #     if unique_models:
+    #         self.results_models_list = get_unique_models(model_list=self.results_models_list, top_x=100)
+
+    #     self.load_models_from_list(model_list=self.results_models_list)
+
+    #     try:
+    #         self.tmmatrix = pd.read_csv(glob.glob(f'{self.ref_obj}-tmalign-matrix*.csv')[0], index_col=0)
+    #     except IndexError:
+    #         self.tmmatrix = pd.DataFrame(index=self.results_models_list, columns=self.results_models_list)
+
+    #     self.show_matrix()
+
+    #     pairs = combinations(self.results_models_list, 2)
+
+    #     pairs_len = len(list(pairs))
+    #     pair_counter = 0
+
+    #     for pair in pairs:
+    #         pair_counter +=1
+    #         if pair not in self.matrix_dict:
+    #             object_1_length = self.get_sequence_length(pair[0])
+    #             object_2_length = self.get_sequence_length(pair[1])
+
+    #             # Set the smaller sequence as the target
+    #             if object_1_length >= object_2_length:
+    #                 target = pair[1]
+    #                 mobile = pair[0]
+    #             elif object_1_length < object_2_length:
+    #                 target = pair[0]
+    #                 mobile = pair[1]
+
+    #             self.matrix_dict[pair] = cmd.tmalign(mobile, target)
+
+    #             if save_temp:
+    #                 with open(f'tmmatrix_hashmap.json', 'w', encoding='UTF8') as json_file:
+    #                     json.dump(self.matrix_dict, json_file, indent=4)
+
+
+    # def matrix_dict_to_df(self):
+    #     # Load data from tmmatrix_hashmap.json if results aren't loaded into self.matrix_dict
+    #     if self.matrix_dict == {}:
+    #         with open(f'tmmatrix_hashmap.json', 'w', encoding='UTF8') as matrix_json_file:
+    #             self.matrix_dict = json.load(matrix_json_file)
+
     def show_matrix(self):
         print(self.tmmatrix)
 
     def get_matrix(self):
         return self.tmmatrix
     
-    def make_dendrogram(self):
+    def make_tree(self):
         # Invert the DataFrame (subtract each value from 1)
         inverted_df = 1 - self.tmmatrix
 
         lower_tri_df = inverted_df.where(np.tril(np.ones(inverted_df.shape)).astype(bool))
 
         lower_tri_lists = [[value for value in row if not math.isnan(value)] for row in lower_tri_df.values.tolist()]
-
 
         test_matrix = DistanceMatrix(names=inverted_df.index.values.tolist(),matrix=lower_tri_lists)
 
@@ -287,8 +336,9 @@ def df_to_file(dataframe:pd.DataFrame, filename:str, filetype:str='csv', index_l
     }
     
     current_date = datetime.datetime.now().strftime('%Y%m%d')
-    if filetype not in ['csv', 'xlsx']:
+    if filetype not in ('csv', 'xlsx'):
         raise ValueError('Invalid filetype specified. Please use "csv" or "xlsx".')
+
     if index_label:
         method_map[filetype](f'{filename}-{current_date}.{filetype}', index=True, index_label=index_label)
     else:
@@ -326,12 +376,10 @@ def align():
                                 pymol_instance.cealign_all,
                                 pymol_instance.super_all,
                                 pymol_instance.tmalign_all):
-
         print('-' * 100)
         alignment_algorithm()
         with open(f'{pymol_instance.ref}-results.json', 'w', encoding='UTF8') as json_file:
             json.dump(pymol_instance.results_dict, json_file, indent=4)
-
 
     # Sort results_dict by TMalign score
     pymol_instance.results_dict = dict(sorted(pymol_instance.results_dict.items(), key=lambda item: item[1]['tmalign'], reverse=True))
@@ -360,7 +408,7 @@ def align():
                                 filename=f'{tmmatrix.ref_obj}-tmalign-matrix',
                                 filetype=extension)
 
-    tree = tmmatrix.make_dendrogram()
+    tree = tmmatrix.make_tree()
     
     Phylo.write(tree, f'{tmmatrix.ref_obj}-tree.txt', 'newick')
 
