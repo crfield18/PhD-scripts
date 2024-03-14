@@ -4,7 +4,7 @@ def showaromatics(selection='all'):
     cmd.hide('everything', selection)
     cmd.show('cartoon', selection)
     cmd.color('gray', selection)
-    cmd.select('aromatics', f'(resn tyr+trp+his) and {selection}')
+    cmd.select('aromatics', f'(resn tyr+trp+phe) and {selection}')
     cmd.show('sticks', '(aromatics and !(name c+n+o))')
     cmd.color('magenta', 'aromatics')
     cmd.disable('aromatics')
