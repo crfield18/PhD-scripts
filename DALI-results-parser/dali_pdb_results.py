@@ -22,21 +22,6 @@ def regex_finder(regex_pattern, url: str):
         return match.group()
     return None
 
-def html_pdb_line_filter(line: str):
-    if not line.strip() or '<' in line:
-        return None
-    return line
-
-def html_to_pdb(pdb_file):
-    with open(pdb_file, 'r+', encoding='UTF8') as file:
-        lines = file.readlines()
-        # Remove any non-PDB format lines from the file
-        filtered_lines = filter(lambda line: html_pdb_line_filter(line), lines)
-        # Move the cursor to the beginning of the file
-        file.seek(0)
-        file.writelines(filtered_lines)
-        file.truncate()
-
 # Parser for the coordinates section of a pdb file
 # https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html
 class PDBCoordsParser: 
@@ -89,9 +74,9 @@ class DaliResults:
         self.dir_downloads = self.cwd / 'results' / self.job_id
 
         directories = {
-            'dir_dali': 'dali_results_pages',
-            'dir_pdb_aligned': 'pdb_dali_aligned',
-            'dir_pdb_clean': 'pdb_chains'
+            'dir_dali': 'dali_pages',
+            'dir_pdb_aligned': 'pdb_raw',
+            'dir_pdb_clean': 'pdb_clean'
         }
 
         for name, dirname in directories.items():
@@ -107,23 +92,30 @@ class DaliResults:
             soup = BeautifulSoup(file, 'html.parser')
             self.pages = [a.get('href') for a in soup.find_all('a')]
 
+        downloaded_pages = []
+
         for page in self.pages:
             try:
                 page_url = f'{self.results_url}{page}'
                 output_file = self.dir_dali / page
                 if not output_file.exists():
-
+                    # Always download the full PDB match page as s001A.html 
+                    if page.endswith('.html') and not any(page.endswith(pattern) for pattern in ('-25.html', '-50.html', '-90.html')):
+                        output_file = self.dir_dali / 's001A.html'
                     wget.download(url=page_url, out=str(output_file))
                 else:
                     print(f'\r{output_file.name} found.\tSkipping...', end='', flush=True)
+                downloaded_pages.append(self.dir_dali / page)
+
             except Exception as e:
                 print(f'\nError downloading {output_file.name}: {e}.')
+
 
         return self.pages
 
     def pdb_links(self):
         dali_pdbs = {}
-        with open(self.dir_dali / f'{self.job_id}.html', 'r', encoding='UTF8') as results_html:
+        with open(self.dir_dali / 's001A.html', 'r', encoding='UTF8') as results_html:
             for line in results_html:
                 if 'VALUE="cd2=' not in line:
                     pass
@@ -140,6 +132,21 @@ class DaliResults:
         return self.dali_pdbs
 
     def aligned_pdb_download(self):
+        def html_pdb_line_filter(line: str):
+            if not line.strip() or '<' in line:
+                return None
+            return line
+
+        def html_to_pdb(pdb_file):
+            with open(pdb_file, 'r+', encoding='UTF8') as file:
+                lines = file.readlines()
+                # Remove any non-PDB format lines from the file
+                filtered_lines = filter(lambda line: html_pdb_line_filter(line), lines)
+                # Move the cursor to the beginning of the file
+                file.seek(0)
+                file.writelines(filtered_lines)
+                file.truncate()
+
         for code, download_url in tqdm(self.dali_pdbs.items(),
                                        desc='',
                                        unit=' PDB'):
@@ -228,17 +235,36 @@ class DaliResults:
 
         print(unique_pdbs)
 
-    
+        def fix_resiude_numbering(line:str, starting_residue=1):
+            current_residue = int(line[22:26])
+            if line.startswith('ATOM'):
+                return f'{line[0:22]}{str(1+(current_residue-starting_residue)).rjust(4)}{line[26:-1]}\n'
+            else:
+                return f'{line}\n'
+
         for pdb, chain_list in tqdm(unique_pdbs.items(),
                                     desc='Splitting',
                                     unit=' file'):
             for chain in chain_list:
+                atom_line_check = False
+                starting_residue = None
                 with open(self.dir_pdb_aligned / f'{pdb}{chain}.pdb', 'r') as input_file, open(self.dir_pdb_clean / f'{pdb}-{chain}.pdb', 'w') as output_file:
                     for line in input_file:
-                        if line.startswith('ATOM') and PDBCoordsParser(line).get_chainID() == chain:
-                            output_file.writelines(line)
-                    output_file.writelines('TER')
+                        if line.startswith('ATOM'):
+                            line_parser = PDBCoordsParser(line)
+                            # Filter out alternate locations for residues (i.e., only location A is written)
+                            if line_parser.altLoc not in (' ', 'A'):
+                                continue
+                            if line_parser.get_chainID() == chain:
+                                if starting_residue == None:
+                                    starting_residue = int(line_parser.resSeq)
+                                atom_line_check = True
+                                output_file.writelines(fix_resiude_numbering(line, starting_residue))
 
+                    output_file.writelines('TER')
+                
+                if atom_line_check == False:
+                    Path.unlink(self.dir_pdb_clean.joinpath(f'{pdb}-{chain}.pdb'), missing_ok=True)
 
 def main():
     dali_job = DaliResults()
